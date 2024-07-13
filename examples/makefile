@@ -23,6 +23,8 @@ SRC_FILES := \
     ../lib/cnext/src/Vector.c \
     ../lib/cnext/src/WinCThreads.c \
     ../lib/cnext/src/WinProcesses.c \
+    ../lib/cnext/src/ZipLib.c \
+    ../lib/cnext/src/miniz.c \
     ../src/DbClientLib.c \
     ../src/LoggingLib.c \
     ../src/MariaDbLib.c \
