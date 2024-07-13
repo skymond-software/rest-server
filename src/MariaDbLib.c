@@ -36,6 +36,8 @@
 #else
 #undef printLog
 #define printLog(...) {}
+#undef printBinary
+#define printBinary(...) {}
 #define logFile stderr
 #define LOG_MALLOC_FAILURE(...) {}
 #endif
