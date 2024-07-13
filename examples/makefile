@@ -47,10 +47,12 @@ DEFINES := \
     -DwsResponseObjectDestroy=rbTreeDestroy \
     -DwsResponseObjectToJson=rbTreeToJson \
 
-all:
+all: $(BUILDDIR)/sqlite3.o
 	$(MKDIR) $(BUILDDIR)
-	$(CC) -c ../src/sqlite3.c -o $(BUILDDIR)/sqlite3.o
 	$(CXX) $(FLAGS) $(INCLUDES) $(DEFINES) $(BUILDDIR)/sqlite3.o $(SRC_FILES) ExampleService.c $(LINKS) -o $(BUILDDIR)/web-service
+
+$(BUILDDIR)/sqlite3.o: ../src/sqlite3.c
+	$(CC) -c ../src/sqlite3.c -o $(BUILDDIR)/sqlite3.o
 
 32:
 	$(MKDIR) $(BUILDDIR)
