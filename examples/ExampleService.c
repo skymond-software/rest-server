@@ -3,12 +3,6 @@
 #include "RedBlackTree.h"
 #include "LoggingLib.h"
 
-/// @var currentSessionTokens
-///
-/// @brief Data structure session tokens that are currently active in the
-/// system.
-RedBlackTree *currentSessionTokens = NULL;
-
 /// @def VALID_SESSION_TOKEN
 ///
 /// @brief Value for a valid session token (i.e. non-NULL).
@@ -36,6 +30,7 @@ RedBlackTree *currentSessionTokens = NULL;
 WsResponseObject *login(WebService *webService,
   WsConnectionInfo *wsConnectionInfo
 ) {
+  RedBlackTree *currentSessionTokens = (RedBlackTree*) webService->context;
   WsRequestObject *inputParams = wsConnectionInfo->functionParams;
   WsResponseObject *outputParams = NULL;
   
@@ -102,6 +97,7 @@ WsResponseObject *login(WebService *webService,
 WsResponseObject *logout(WebService *webService,
   WsConnectionInfo *wsConnectionInfo
 ) {
+  RedBlackTree *currentSessionTokens = (RedBlackTree*) webService->context;
   WsRequestObject *inputParams = wsConnectionInfo->functionParams;
   WsResponseObject *outputParams = NULL;
   
@@ -198,7 +194,8 @@ int main(int argc, char **argv) {
   (void) argc;
   (void) argv;
   
-  currentSessionTokens = rbTreeCreate(typeI64);
+  RedBlackTree *currentSessionTokens = rbTreeCreate(typeI64);
+  webService.context = currentSessionTokens;
   
   WebServer* webServer = webServerCreate(
     /*interfacePath=*/ ".", /*portNumber=*/ 9000,
