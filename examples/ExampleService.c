@@ -3,6 +3,13 @@
 #include "RedBlackTree.h"
 #include "LoggingLib.h"
 
+/// @struct ExampleService
+///
+/// @brief Container that will hold the context for this service.
+typedef struct ExampleService {
+  RedBlackTree *currentSessionTokens;
+} ExampleService;
+
 /// @def VALID_SESSION_TOKEN
 ///
 /// @brief Value for a valid session token (i.e. non-NULL).
@@ -30,7 +37,8 @@
 WsResponseObject *login(WebService *webService,
   WsConnectionInfo *wsConnectionInfo
 ) {
-  RedBlackTree *currentSessionTokens = (RedBlackTree*) webService->context;
+  ExampleService *exampleService = (ExampleService*) webService->context;
+  RedBlackTree *currentSessionTokens = exampleService->currentSessionTokens;
   WsRequestObject *inputParams = wsConnectionInfo->functionParams;
   WsResponseObject *outputParams = NULL;
   
@@ -97,7 +105,8 @@ WsResponseObject *login(WebService *webService,
 WsResponseObject *logout(WebService *webService,
   WsConnectionInfo *wsConnectionInfo
 ) {
-  RedBlackTree *currentSessionTokens = (RedBlackTree*) webService->context;
+  ExampleService *exampleService = (ExampleService*) webService->context;
+  RedBlackTree *currentSessionTokens = exampleService->currentSessionTokens;
   WsRequestObject *inputParams = wsConnectionInfo->functionParams;
   WsResponseObject *outputParams = NULL;
   
@@ -194,8 +203,9 @@ int main(int argc, char **argv) {
   (void) argc;
   (void) argv;
   
-  RedBlackTree *currentSessionTokens = rbTreeCreate(typeI64);
-  webService.context = currentSessionTokens;
+  ExampleService exampleService;
+  exampleService.currentSessionTokens = rbTreeCreate(typeI64);
+  webService.context = &exampleService;
   
   WebServer* webServer = webServerCreate(
     /*interfacePath=*/ ".", /*portNumber=*/ 9000,
