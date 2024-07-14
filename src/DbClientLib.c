@@ -1026,6 +1026,10 @@ void* dbGetResultByIndex(const DbResult *dbResult,
 i64 dbGetFieldIndexByName(const DbResult *dbResult, const char *fieldName) {
   const char *dbName = (dbResult != NULL) ? dbResult->dbName : "NULL";
   const char *tableName = (dbResult != NULL) ? dbResult->tableName : "NULL";
+  // dbName and tableName are only used in logging, so cast them to void so that
+  // the complier doesn't complain when logging isn't enabled.
+  (void) dbName;
+  (void) tableName;
   printLog(TRACE,
     "ENTER dbGetFieldIndexByName(dbName=\"%s\", tableName=\"%s\", "
     "fieldName=\"%s\")\n", dbName, tableName, fieldName);
@@ -3802,6 +3806,9 @@ DbResult* dbGetOrValuesDict(Database *database,
   if (queryResult != NULL) {
     numResults = queryResult->numResults;
   }
+  // numResults is only used in logging, so cast it to a void to keep the
+  // compmiler from complaining when logging is disabled.
+  (void) numResults;
   
   SCOPE_EXIT("database=%p, dbString=\"%s\", tableName=\"%s\", select=\"%s\", "
     "orderBy=\"%s\", args=%p", "%llu results", database, strOrEmpty(dbString),
