@@ -10,6 +10,7 @@ SRC_FILES := \
     ../lib/cnext/src/DataTypes.c \
     ../lib/cnext/src/Dictionary.c \
     ../lib/cnext/src/DirectoryLib.c \
+    ../lib/cnext/src/Glibc27CompatLib.c \
     ../lib/cnext/src/HashTable.c \
     ../lib/cnext/src/List.c \
     ../lib/cnext/src/PosixCThreads.c \
@@ -39,8 +40,40 @@ INCLUDES := \
     -I../lib/cnext/include \
 
 LINKS := \
-    -lpthread \
     -lcrypto \
+    -Wl,--no-as-needed \
+    -l:librt.so.1 \
+    -l:libpthread.so.0 \
+    -l:libdl.so.2 \
+    -Wl,--as-needed \
+    -Wl,--gc-sections \
+    -Wl,--wrap=__libc_start_main \
+    -Wl,--wrap=dlsym \
+    -Wl,--wrap=dlopen \
+    -Wl,--wrap=dladdr \
+    -Wl,--wrap=dlclose \
+    -Wl,--wrap=dlerror \
+    -Wl,--wrap=dlvsym \
+    -Wl,--wrap=pthread_cancel \
+    -Wl,--wrap=pthread_create \
+    -Wl,--wrap=pthread_detach \
+    -Wl,--wrap=pthread_getspecific \
+    -Wl,--wrap=pthread_join \
+    -Wl,--wrap=pthread_key_create \
+    -Wl,--wrap=pthread_key_delete \
+    -Wl,--wrap=pthread_mutexattr_destroy \
+    -Wl,--wrap=pthread_mutexattr_init \
+    -Wl,--wrap=pthread_mutexattr_settype \
+    -Wl,--wrap=pthread_mutex_timedlock \
+    -Wl,--wrap=pthread_mutex_trylock \
+    -Wl,--wrap=pthread_once \
+    -Wl,--wrap=pthread_rwlock_destroy \
+    -Wl,--wrap=pthread_rwlock_init \
+    -Wl,--wrap=pthread_rwlock_rdlock \
+    -Wl,--wrap=pthread_rwlock_unlock \
+    -Wl,--wrap=pthread_rwlock_wrlock \
+    -Wl,--wrap=pthread_setspecific \
+    -Wl,--wrap=clock_gettime \
 
 DEFINES := \
     -DWsResponseObject=RedBlackTree \
@@ -55,6 +88,7 @@ all: $(BUILDDIR)/sqlite3.o
 	$(CXX) $(FLAGS) $(INCLUDES) $(DEFINES) $(BUILDDIR)/sqlite3.o $(SRC_FILES) ExampleService.c $(LINKS) -o $(BUILDDIR)/web-service
 
 $(BUILDDIR)/sqlite3.o: ../src/sqlite3.c
+	$(MKDIR) $(BUILDDIR)
 	$(CC) -c ../src/sqlite3.c -o $(BUILDDIR)/sqlite3.o
 
 32:
