@@ -48,3 +48,4 @@ $(OBJ_DIR)/sqlite3.o: $(SRC_DIR)/sqlite3.c
 cleanall:
 	$(REMOVE) $(BUILD_DIR)
 	$(MAKE) -C lib/cnext -f makefile cleanall
+
