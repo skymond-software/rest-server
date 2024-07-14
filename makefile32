@@ -11,3 +11,5 @@ lib/cnext/build/obj32/Cnext.a:
 
 clean:
 	$(REMOVE) $(OBJ_DIR)
+	$(MAKE) -C lib/cnext -f makefile32 clean
+
