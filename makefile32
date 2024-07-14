@@ -1,0 +1,13 @@
+BUILD_DIR       := build
+OBJ_DIR         := $(BUILD_DIR)/obj32
+CC              := gcc -m32 -march=i686 -mtune=i686
+CXX             := gcc -m32 -march=i686 -mtune=i686
+EXTRA_OBJ_FILES := lib/cnext/build/obj32/cnext.a
+
+include include.mk
+
+lib/cnext/build/obj32/cnext.a:
+	$(MAKE) -C lib/cnext -f makefile32
+
+clean:
+	$(REMOVE) $(OBJ_DIR)
