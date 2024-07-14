@@ -20,6 +20,7 @@ SRC_FILES := \
     ../lib/cnext/src/Sockets.c \
     ../lib/cnext/src/Stack.c \
     ../lib/cnext/src/StringLib.c \
+    ../lib/cnext/src/TimeUtils.c \
     ../lib/cnext/src/Vector.c \
     ../lib/cnext/src/WinCThreads.c \
     ../lib/cnext/src/WinProcesses.c \
