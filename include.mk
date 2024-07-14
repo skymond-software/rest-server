@@ -35,7 +35,7 @@ WARNINGS := \
     -Werror \
 
 all: $(OBJ_FILES)
-	$(ARCHIVE) $(OBJ_DIR)/rest-server.a $(OBJ_FILES)
+	$(ARCHIVE) $(OBJ_DIR)/RestServer.a $(OBJ_FILES)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INCLUDE_DIR)/%.h $(MAKEFILE) include.mk
 	$(MKDIR) $(OBJ_DIR)
@@ -47,3 +47,4 @@ $(OBJ_DIR)/sqlite3.o: $(SRC_DIR)/sqlite3.c
 
 cleanall:
 	$(REMOVE) $(BUILD_DIR)
+	$(MAKE) -C lib/cnext -f makefile cleanall
