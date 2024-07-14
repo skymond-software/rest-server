@@ -16,6 +16,7 @@ SRC_FILES := \
     ../lib/cnext/src/PosixCThreads.c \
     ../lib/cnext/src/PosixProcesses.c \
     ../lib/cnext/src/Queue.c \
+    ../lib/cnext/src/RandomLib.c \
     ../lib/cnext/src/RedBlackTree.c \
     ../lib/cnext/src/Scope.c \
     ../lib/cnext/src/Sockets.c \
