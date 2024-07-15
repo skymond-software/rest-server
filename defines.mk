@@ -1,4 +1,6 @@
-DEFINES := \
+include lib/cnext/defines.mk
+
+DEFINES += \
     -DWsResponseObject=RedBlackTree \
     -DWsRequestObject=RedBlackTree \
     -DWsResponseNode=RedBlackNode \
