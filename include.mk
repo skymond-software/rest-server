@@ -21,13 +21,7 @@ INCLUDES := \
 
 LINKS := \
 
-DEFINES := \
-    -DWsResponseObject=RedBlackTree \
-    -DWsRequestObject=RedBlackTree \
-    -DWsResponseNode=RedBlackNode \
-    -DWsRequestNode=RedBlackNode \
-    -DwsResponseObjectDestroy=rbTreeDestroy \
-    -DwsResponseObjectToJson=rbTreeToJson \
+include defines.mk
 
 WARNINGS := \
     -Wall \
