@@ -1,4 +1,4 @@
-include lib/cnext/defines.mk
+include $(REST_SERVER_PATH)lib/cnext/defines.mk
 
 DEFINES += \
     -DWsResponseObject=RedBlackTree \
