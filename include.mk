@@ -7,7 +7,6 @@ ARCHIVE     := ar rcs
 
 OBJ_FILES := \
     $(OBJ_DIR)/DbClientLib.o \
-    $(OBJ_DIR)/LoggingLib.o \
     $(OBJ_DIR)/MariaDbLib.o \
     $(OBJ_DIR)/SqlClientLib.o \
     $(OBJ_DIR)/SqliteLib.o \
