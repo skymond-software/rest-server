@@ -27,7 +27,7 @@ WARNINGS := \
     -Wextra \
     -Werror \
 
-all: $(OBJ_FILES)
+all: $(OBJ_FILES) $(MAKEFILE) include.mk
 	$(ARCHIVE) $(OBJ_DIR)/RestServer.a $(OBJ_FILES)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INCLUDE_DIR)/%.h $(MAKEFILE) include.mk

@@ -2,6 +2,7 @@ BUILD_DIR       := build
 OBJ_DIR         := $(BUILD_DIR)/obj64
 CC              := gcc
 CXX             := g++
+MAKEFILE        := makefile
 EXTRA_OBJ_FILES := lib/cnext/build/obj64/Cnext.a
 
 include include.mk
