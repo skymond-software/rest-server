@@ -1,14 +1,12 @@
 BUILD_DIR       := build
 OBJ_DIR         := $(BUILD_DIR)/obj64
+EXE_DIR         := $(BUILD_DIR)/exe64
 CC              := gcc
 CXX             := g++
 MAKEFILE        := makefile
-EXTRA_OBJ_FILES := lib/cnext/build/obj64/Cnext.a
+CNEXT_OBJ_DIR   := lib/cnext/build/obj64
 
 include include.mk
-
-lib/cnext/build/obj64/Cnext.a:
-	$(MAKE) -C lib/cnext -f makefile
 
 clean:
 	$(REMOVE) $(OBJ_DIR)

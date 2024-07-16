@@ -1,14 +1,12 @@
 BUILD_DIR       := build
 OBJ_DIR         := $(BUILD_DIR)/obj32
+EXE_DIR         := $(BUILD_DIR)/exe32
 CC              := gcc -m32 -march=i686 -mtune=i686
 CXX             := gcc -m32 -march=i686 -mtune=i686
 MAKEFILE        := makefile32
-EXTRA_OBJ_FILES := lib/cnext/build/obj32/Cnext.a
+CNEXT_OBJ_DIR   := lib/cnext/build/obj32
 
 include include.mk
-
-lib/cnext/build/obj32/Cnext.a:
-	$(MAKE) -C lib/cnext -f makefile32
 
 clean:
 	$(REMOVE) $(OBJ_DIR)
