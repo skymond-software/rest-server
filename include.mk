@@ -42,7 +42,11 @@ INCLUDES := \
     -Iinclude \
     -Ilib/cnext/include \
 
-LINKS := \
+LINKS += \
+    -Wl,-Bstatic \
+    -l:libssl.a \
+    -l:libcrypto.a \
+    -Wl,-Bdynamic \
 
 include defines.mk
 
@@ -63,10 +67,6 @@ $(EXE_DIR)/sqlite-client: $(OBJ_DIR)/RestServer.a
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INCLUDE_DIR)/%.h $(MAKEFILE) include.mk
 	$(MKDIR) $(OBJ_DIR)
 	$(CXX) $(FLAGS) $(INCLUDES) $(DEFINES) $(WARNINGS) -c $< -o $@
-
-.PHONY: $(CNEXT_OBJ_DIR)/Cnext.a
-$(CNEXT_OBJ_DIR)/Cnext.a:
-	$(MAKE) -C lib/cnext -f makefile
 
 $(OBJ_DIR)/sqlite3.o: $(SRC_DIR)/sqlite3.c
 	$(MKDIR) $(OBJ_DIR)

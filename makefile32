@@ -12,3 +12,7 @@ clean:
 	$(REMOVE) $(OBJ_DIR)
 	$(MAKE) -C lib/cnext -f makefile32 clean
 
+.PHONY: $(CNEXT_OBJ_DIR)/Cnext.a
+$(CNEXT_OBJ_DIR)/Cnext.a:
+	$(MAKE) -C lib/cnext -f makefile32
+
