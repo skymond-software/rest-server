@@ -46,8 +46,6 @@ LINKS := \
     -L$(OBJ_DIR) \
     -l:RestServer.a \
     $(COMMAND_LINE_LINKS) \
-    -l:libssl.a \
-    -l:libcrypto.a \
 
 WARNINGS := \
     -Wall \
