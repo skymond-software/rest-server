@@ -19,6 +19,7 @@ CNEXT_OBJ_FILES := \
     $(CNEXT_OBJ_DIR)/Queue.o \
     $(CNEXT_OBJ_DIR)/RandomLib.o \
     $(CNEXT_OBJ_DIR)/RedBlackTree.o \
+    $(CNEXT_OBJ_DIR)/RsaLib.o \
     $(CNEXT_OBJ_DIR)/Scope.o \
     $(CNEXT_OBJ_DIR)/Sockets.o \
     $(CNEXT_OBJ_DIR)/Stack.o \
