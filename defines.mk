@@ -7,4 +7,5 @@ DEFINES += \
     -DWsRequestNode=RedBlackNode \
     -DwsResponseObjectDestroy=rbTreeDestroy \
     -DwsResponseObjectToJson=rbTreeToJson \
+    $(COMMAND_LINE_DEFINES) \
 

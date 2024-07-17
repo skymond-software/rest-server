@@ -42,27 +42,28 @@ INCLUDES := \
     -Iinclude \
     -Ilib/cnext/include \
 
-LINKS += \
-    -Wl,-Bstatic \
+LINKS := \
+    -L$(OBJ_DIR) \
+    -l:RestServer.a \
+    $(COMMAND_LINE_LINKS) \
     -l:libssl.a \
     -l:libcrypto.a \
-    -Wl,-Bdynamic \
-
-include defines.mk
 
 WARNINGS := \
     -Wall \
     -Wextra \
     -Werror \
 
+include defines.mk
+
 all: $(OBJ_DIR)/RestServer.a $(EXE_DIR)/sqlite-client
 
 $(OBJ_DIR)/RestServer.a: $(CNEXT_OBJ_DIR)/Cnext.a $(OBJ_FILES) $(MAKEFILE) include.mk $(OBJ_DIR)/sqlite3.o
 	$(ARCHIVE) $(OBJ_DIR)/RestServer.a $(OBJ_FILES) $(OBJ_DIR)/sqlite3.o $(CNEXT_OBJ_FILES)
 
-$(EXE_DIR)/sqlite-client: $(OBJ_DIR)/RestServer.a
+$(EXE_DIR)/sqlite-client: $(SRC_DIR)/SqliteClient.c $(OBJ_DIR)/RestServer.a
 	$(MKDIR) $(EXE_DIR)
-	$(CXX) $(FLAGS) $(INCLUDES) $(DEFINES) $(WARNINGS) -L$(OBJ_DIR) $(SRC_DIR)/SqliteClient.c -l:RestServer.a -o $@
+	$(CXX) $(FLAGS) $(INCLUDES) $(DEFINES) $(WARNINGS) $< $(LINKS) -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INCLUDE_DIR)/%.h $(MAKEFILE) include.mk
 	$(MKDIR) $(OBJ_DIR)
