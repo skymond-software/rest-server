@@ -22,6 +22,8 @@ CNEXT_OBJ_FILES := \
     $(CNEXT_OBJ_DIR)/RsaLib.o \
     $(CNEXT_OBJ_DIR)/Scope.o \
     $(CNEXT_OBJ_DIR)/Sockets.o \
+    $(CNEXT_OBJ_DIR)/SslCertificate.o \
+    $(CNEXT_OBJ_DIR)/SslKey.o \
     $(CNEXT_OBJ_DIR)/Stack.o \
     $(CNEXT_OBJ_DIR)/StringLib.o \
     $(CNEXT_OBJ_DIR)/TimeUtils.o \
