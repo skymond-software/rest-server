@@ -13,6 +13,7 @@ SRC_FILES := \
     ../lib/cnext/src/Glibc27CompatLib.c \
     ../lib/cnext/src/HashTable.c \
     ../lib/cnext/src/List.c \
+    ../lib/cnext/src/LoggingLib.c \
     ../lib/cnext/src/PosixCThreads.c \
     ../lib/cnext/src/PosixProcesses.c \
     ../lib/cnext/src/Queue.c \
@@ -29,8 +30,6 @@ SRC_FILES := \
     ../lib/cnext/src/ZipLib.c \
     ../lib/cnext/src/miniz.c \
     ../src/DbClientLib.c \
-    ../src/LoggingLib.c \
-    ../src/MariaDbLib.c \
     ../src/SqlClientLib.c \
     ../src/SqliteLib.c \
     ../src/WebClientLib.c \
@@ -41,7 +40,6 @@ INCLUDES := \
     -I../lib/cnext/include \
 
 LINKS := \
-    -lcrypto \
     -Wl,--no-as-needed \
     -l:librt.so.1 \
     -l:libpthread.so.0 \
