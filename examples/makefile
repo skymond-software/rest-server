@@ -30,6 +30,7 @@ SRC_FILES := \
     ../lib/cnext/src/ZipLib.c \
     ../lib/cnext/src/miniz.c \
     ../src/DbClientLib.c \
+    ../src/MariaDbLib.c \
     ../src/SqlClientLib.c \
     ../src/SqliteLib.c \
     ../src/WebClientLib.c \
