@@ -1699,7 +1699,7 @@ bool sqlUpdateResultVargs(const DbResult *dbResult, u64 resultIndex,
   const char **fieldNames = dbGetFieldNames(dbResult);
   u64 numFields = dbResult->numFields;
   for (u64 i = 0; i < numFields; i++) {
-    void *value = dbGetResultByIndex(dbResult, resultIndex, i, typeBytes);
+    void *value = dbGetResultByIndex(dbResult, resultIndex, i, NULL);
     if (value != NULL) {
       Bytes escapedValue = NULL;
       if (dbResult->fieldTypes[i] == typeBytes) {
