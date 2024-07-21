@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 ################################################################################
 ##                                                                            ##
-##            (c) Copyright 2022 James Card. All Rights Reserved.             ##
+##                   (c) Copyright 2012-2024 Skymond, LLC.                    ##
 ##                                                                            ##
-##                         https://www.jamescard.org                          ##
+##                            https://skymond.io                              ##
 ##                                                                            ##
 ## Permission is hereby granted, free of charge, to any person obtaining a    ##
 ## copy of this software and associated documentation files (the "Software"), ##
