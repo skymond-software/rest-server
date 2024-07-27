@@ -3778,8 +3778,11 @@ DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
   
   // Have to do a "use" for getting table names.  Use a transaction so that we
   // can group the commands.
-  MariaDb *mariaDb = (MariaDb*) database->connection;
-  tss_set(mariaDb->transactionInProgress, VOID_POINTER_TRUE);
+  //
+  // Note:  We don't actually need a transaction for this operation.  What we
+  // do need, however, is to be guaranteed that we keep the same connection
+  // between the two queries.  A transaction guarantees that.
+  mariaDbStartTransaction(database);
   bytesAddStr(&query, "use ");
   bytesAddStr(&query, dbName);
   bytesAddStr(&query, ";");
@@ -3791,7 +3794,7 @@ DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
       "= {could not set database}\n",
       database, dbName);
     queryResult = dbFreeResult(queryResult);
-    tss_set(mariaDb->transactionInProgress, VOID_POINTER_FALSE);
+    mariaDbCommitTransaction(database);
     dbName = stringDestroy(dbName);
     return returnValue;
   }
@@ -3800,7 +3803,7 @@ DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
   bytesAddStr(&query, "show tables;");
   queryResult = mariaDbExecQueryBytes((MariaDb*) database->connection, query);
   query = bytesDestroy(query);
-  tss_set(mariaDb->transactionInProgress, VOID_POINTER_FALSE);
+  mariaDbCommitTransaction(database);
   
   returnValue = dbFreeResult(returnValue);
   returnValue = queryResult;
