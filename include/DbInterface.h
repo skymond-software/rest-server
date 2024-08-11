@@ -480,6 +480,7 @@ TypeDescriptor* dbGetFieldTypeByIndex(Database *database,
   const char *dbName, const char *tableName, u64 fieldIndex);
 bool dbRenameDatabase(Database *database,
   const char *oldDbName, const char *newDbName);
+DbResult* dbResultGetRange(DbResult *inputResult, u64 startIndex, u64 endIndex);
 
 
 #ifdef __cplusplus

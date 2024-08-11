@@ -4327,3 +4327,90 @@ int dbShareTableLock(const Dictionary *tablesToLock) {
 }
 */
 
+/// @fn DbResult* dbResultGetRange(DbResult *inputResult, u64 startIndex, u64 endIndex)
+///
+/// @brief Get a subset range of results from a DbResult returned by a previous
+/// query.
+///
+/// @param inputResult The DbResult returned from an earlier query.
+/// @param startIndex The index of the first result within the DbResult to copy
+///   from.
+/// @param endIndex One greater than the index of the last result within the
+///   DbResult to copy from.
+///
+/// @return Returns a new DbResult with the selected subset of results on
+/// success, an empty dbResult on failure.
+DbResult* dbResultGetRange(
+  DbResult *inputResult, u64 startIndex, u64 endIndex
+) {
+  SCOPE_ENTER("inputResult=%p, startIndex=%llu, endIndex=%llu",
+    inputResult, llu(startIndex), llu(endIndex));
+  
+  DbResult *outputResult = (DbResult*) calloc(1, sizeof(DbResult));
+  
+  // Do all the straight copies first.
+  outputResult->numFields = inputResult->numFields;
+  outputResult->fieldTypes = (TypeDescriptor**) malloc(
+    outputResult->numFields * sizeof(TypeDescriptor*));
+  memcpy(outputResult->fieldTypes, inputResult->fieldTypes,
+    outputResult->numFields * sizeof(TypeDescriptor*));
+  // outputResult->numRows is computed below
+  // outputResult->numResults is computed below
+  // outputResult->rows is computed below
+  straddstr(&outputResult->dbName, inputResult->dbName);
+  straddstr(&outputResult->tableName, inputResult->tableName);
+  outputResult->successful = inputResult->successful;
+  outputResult->fieldNameIndexMap = htCopy(inputResult->fieldNameIndexMap);
+  outputResult->database = inputResult->database;
+  
+  // Figure out how much we need to allocate for our subset range.
+  if (endIndex >= inputResult->numResults) {
+    if (inputResult->numResults > 0) {
+      endIndex = inputResult->numResults;
+    } else {
+      endIndex = 0;
+    }
+  }
+  outputResult->numResults = 0;
+  if ((endIndex > startIndex) && (endIndex <= inputResult->numResults)) {
+    outputResult->numResults = endIndex - startIndex;
+  }
+  outputResult->numRows = outputResult->numResults + 1;
+  outputResult->rows = (void***) calloc(1,
+      (outputResult->numRows + 1) * sizeof(void**));
+  for (u64 ii = 0; ii < outputResult->numRows; ii++) {
+    outputResult->rows[ii] = (void**) calloc(1,
+      (outputResult->numFields + 1) * sizeof(void*));
+  }
+  
+  // Copy over the values.
+  Bytes *inputFieldNames = (Bytes*) inputResult->rows[0];
+  Bytes *outputFieldNames = (Bytes*) outputResult->rows[0];
+  for (u64 jj = 0; jj < inputResult->numFields; jj++) {
+    bytesAddBytes(&outputFieldNames[jj], inputFieldNames[jj]);
+  }
+  u64 outputRow = 1;
+  // The rows of the input that we're interested in start at 1, not 0, so we
+  // need to increment both the startIndex and endIndex.
+  startIndex++;
+  endIndex++;
+  for (u64 ii = startIndex; ii < endIndex; ii++) {
+    for (u64 jj = 0; jj < inputResult->numFields; jj++) {
+      if (inputResult->fieldTypes[jj] == typeString) {
+        // These are really Bytes objects.  Treat them as such.  This is the
+        // expected usual case, so list it first.
+        bytesAddBytes((Bytes*) &outputResult->rows[outputRow][jj],
+          (Bytes) inputResult->rows[ii][jj]);
+      } else {
+        outputResult->rows[outputRow][jj]
+          = inputResult->fieldTypes[jj]->copy(inputResult->rows[ii][jj]);
+      }
+    }
+    outputRow++;
+  }
+  
+  SCOPE_EXIT("inputResult=%p, startIndex=%llu, endIndex=%llu", "%llu results",
+    inputResult, llu(startIndex), llu(endIndex), llu(outputResult->numResults));
+  return outputResult;
+}
+
