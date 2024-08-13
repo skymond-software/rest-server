@@ -878,7 +878,7 @@ Database* mariaDbInit_(const char *ignored,
 /// @brief Get a dbClientSocket pointer to use on this thread for
 /// communicating with the database.
 ///
-/// @detail
+/// @details
 /// This function will provide the caller with a dbClientSocket to use unless
 /// no connection can be established.  Order of precedence for this function
 /// is:

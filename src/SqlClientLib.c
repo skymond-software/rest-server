@@ -50,7 +50,7 @@ bool sqlInvalidateTableDescription(void *db,
 /// @brief Make sure the field types of a DbResult are correct before returning
 /// it to the caller.
 ///
-/// @detail
+/// @details
 /// This exists because SQLite has some funky way of recording types.  Even
 /// though the types of the columns in the schema don't change, the types as
 /// recorded in the tables will change depending on how the data was written.
