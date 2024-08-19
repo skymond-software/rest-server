@@ -73,6 +73,8 @@ bool sqliteRenameTable(SqlDatabase *database, const char *dbName,
 i64 sqliteGetSize(void *db, const char *dbName);
 bool sqliteRenameDatabase(void *db,
   const char *oldDbName, const char *newDbName);
+bool sqliteEnsureFieldIndexed(void *database,
+  const char *dbName, const char *tableName, const char *fieldName);
 
 /// @var _sqliteThreadSetup
 ///
@@ -396,6 +398,7 @@ Database* sqliteInit(const char *databasePath) {
   database->getOrValuesDict = sqlGetOrValuesDict;
   database->getSize = sqliteGetSize;
   database->renameDatabase = sqliteRenameDatabase;
+  database->ensureFieldIndexed = sqliteEnsureFieldIndexed;
   database->updateFieldVargs = sqlUpdateFieldVargs;
   database->getFieldTypeByName = sqlGetFieldTypeByName;
   database->getFieldTypeByIndex = sqlGetFieldTypeByIndex;
@@ -2509,5 +2512,49 @@ addError:
   SCOPE_EXIT("db=%p, oldDbName=\"%s\", newDbName=\"%s\"", "%s",
     db, strOrNull(oldDbName), strOrNull(newDbName), boolNames[returnValue]);
   return returnValue;
+}
+
+/// @fn bool sqliteEnsureFieldIndexed(void *database, const Dictionary *tableLock)
+///
+/// @brief Ensure that a particular field in a table is indexed by the database.
+///
+/// @param database A pointer to the SqlDatabase object representing the database
+///   system to query.
+/// @param dbName The name of the database that the table is in.
+/// @param tableName The name of the table the field is in.
+/// @param fieldName The name of the field to make sure is indexed.
+///
+/// @return Returns true on success, false on failure.
+bool sqliteEnsureFieldIndexed(void *database,
+  const char *dbName, const char *tableName, const char *fieldName
+) {
+  SCOPE_ENTER("database=%p, dbName=%s, tableName=%s, fieldName=%s",
+    database, dbName, tableName, fieldName);
+  
+  bool querySuccessful = false;
+  if ((database == NULL) || (dbName == NULL)
+    || (tableName == NULL) || (fieldName == NULL)
+  ) {
+    // Nothing to do.
+    printLog(ERR, "One or more NULL parameters.\n");
+    SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
+      database, dbName, tableName, fieldName, boolNames[querySuccessful]);
+    return querySuccessful;
+  }
+  
+  SqlDatabase *sqlDatabase = (SqlDatabase*) database;
+  Bytes query = NULL;
+  (void) abprintf(&query, "CREATE INDEX IF NOT EXISTS %s.%s_%s ON %s(%s);",
+    dbName, tableName, fieldName, tableName, fieldName);
+  scopeAdd(query, bytesDestroy);
+  
+  DbResult *queryResult
+    = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
+  querySuccessful = queryResult->successful;
+  queryResult = dbFreeResult(queryResult);
+  
+  SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
+    database, dbName, tableName, fieldName, boolNames[querySuccessful]);
+  return querySuccessful;
 }
 

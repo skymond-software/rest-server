@@ -4414,3 +4414,34 @@ DbResult* dbResultGetRange(
   return outputResult;
 }
 
+/// @fn bool dbEnsureFieldIndexed(Database *database, const char *dbName, const char *tableName, const char *fieldName)
+///
+/// @brief Ensure there is an index for a particular field in a database table.
+///
+/// @param database A pointer to the Database object representing the database
+///   system used to generate dbResult.
+/// @param dbName The name of the database that the table is in.
+/// @param tableName The name of the table the field is in.
+/// @param fieldName The name of the field to make sure is indexed.
+///
+/// @return Returns true on success, false on failure.
+bool dbEnsureFieldIndexed(Database *database,
+  const char *dbName, const char *tableName, const char *fieldName
+) {
+  SCOPE_ENTER("database=%p, dbName=%s, tableName=%s, fieldName=%s",
+    database, dbName, tableName, fieldName);
+  
+  dbWaitForTableUnlocked(database, dbName, tableName);
+  char *dbWithInstance = NULL;
+  straddstr(&dbWithInstance, dbName);
+  straddstr(&dbWithInstance, dbInstance);
+  scopeAdd(dbWithInstance, typeString->destroy);
+  bool returnValue
+    = database->ensureFieldIndexed(
+      database->db, dbWithInstance, tableName, fieldName);
+  
+  SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
+    database, dbName, tableName, fieldName, boolNames[returnValue]);
+  return returnValue;
+}
+

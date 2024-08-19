@@ -44,6 +44,16 @@
 #include "Scope.h"
 #include "OsApi.h"
 
+/// @struct SocketMetadata
+///
+/// @brief Structure to serve as the values to the socketMetadata Dictionary
+/// that's part of a MariaDb object.
+///
+/// @var previousThread The ID of the last thread to use the socket.
+typedef struct SocketMetadata {
+  thrd_t previousThread;
+} SocketMetadata;
+
 // External function prototypes.
 bool sqlInvalidateTableDescription(void *db,
   const char *dbName, const char *tableName);
@@ -63,6 +73,8 @@ bool mariaDbAddDatabase(SqlDatabase *database, const char *dbName);
 bool mariaDbDeleteDatabase(SqlDatabase *database, const char *dbName);
 Bytes mariaDbMakeStringLiteral(const char *input);
 Bytes mariaDbMakeBytesLiteral(const Bytes input);
+bool mariaDbEnsureFieldIndexed(void *database,
+  const char *dbName, const char *tableName, const char *fieldName);
 
 char *mariaDbDecodeErrorPacket(u8 *response, u32 responseLength,
   u16 *errorCode, char **sqlState);
@@ -403,12 +415,44 @@ void freeDbClientSocket(void *dbClientSocket) {
       queuePushEntry(socketQueue, dbClientSocket);
       cnd_signal(&database->socketAvailable);
       mtx_unlock(&database->lock);
-    } else {
+    } else { // database == NULL
       // Corresponding database has been disconnected.  Destroy the socket.
       dbClientSocket = socketDestroy((Socket*) dbClientSocket);
     }
     htRemoveEntry(_inUseMariaDbObjects, &threadId);
   }
+}
+
+/// @fn Socket *destroyDbClientSocket(Socket *dbClientSocket)
+///
+/// @brief Destroy a client socket to the MariaDB server, clear its metadata,
+/// and disassociate it with the current thread.  *DO NOT* disassociate the
+/// database with the thread (as freeDbClientSocket does).
+///
+/// @param dbClientSocket A pointer to the socket that is no longer being used
+///   by the current thread.
+///
+/// @return This function always returns NULL.
+Socket *destroyDbClientSocket(Socket *dbClientSocket) {
+  if (dbClientSocket != NULL) {
+    thrd_t threadId = thrd_current();
+    MariaDb *database
+      = (MariaDb*) htGetValue(_inUseMariaDbObjects, &threadId);
+    if (database != NULL) {
+      if (!dictionaryGetValue(database->socketMetadata, dbClientSocket)) {
+        // This is not a valid socket for this library.  This is either a
+        // garbage pointer (most likely) or a Socket from something we don't
+        // manage.  Abort early.
+        tss_set(_threadClientSocket, NULL);
+        return NULL;
+      }
+      dictionaryRemoveEntry(database->socketMetadata, dbClientSocket);
+    }
+    dbClientSocket = socketDestroy(dbClientSocket);
+    tss_set(_threadClientSocket, NULL);
+  }
+  
+  return dbClientSocket;
 }
 
 /// @fn void releaseDbClientSocket(Socket *dbClientSocket)
@@ -423,11 +467,22 @@ void freeDbClientSocket(void *dbClientSocket) {
 ///
 /// @return This function returns no value.
 void releaseDbClientSocket(MariaDb *database, Socket *dbClientSocket) {
+  printLog(DEBUG, "Releasing socket %p\n", dbClientSocket);
+  
   if ((database != NULL) && (dbClientSocket != NULL)) {
+    SocketMetadata *socketMetadata = (SocketMetadata*) dictionaryGetValue(
+      database->socketMetadata, dbClientSocket);
+    if (socketMetadata != NULL) {
+      printLog(DEBUG, "Releasing socket from thread %llu.\n",
+        llu(socketMetadata->previousThread));
+    } else {
+      printLog(DEBUG, "No socket metadata for socket.\n");
+    }
     printLog(DEBUG, "database->transactionInProgress = %s\n",
       boolNames[(intptr_t) tss_get(database->transactionInProgress)]);
     printLog(DEBUG, "database->tablesLocked = %s\n",
       boolNames[(intptr_t) tss_get(database->tablesLocked)]);
+    
     if ((tss_get(database->transactionInProgress) == VOID_POINTER_FALSE)
       && (tss_get(database->tablesLocked) == VOID_POINTER_FALSE)
     ) {
@@ -442,7 +497,7 @@ void releaseDbClientSocket(MariaDb *database, Socket *dbClientSocket) {
     }
     // else the socket needs to stay associated with the thread until the
     // transaction is complete and tables are unlocked.
-  } else if (dbClientSocket != NULL) {
+  } else if (dbClientSocket != NULL) { // database == NULL
     // Corresponding database has been disconnected.  Destroy the socket.
     dbClientSocket = socketDestroy((Socket*) dbClientSocket);
   }
@@ -667,11 +722,32 @@ Database* mariaDbInit_(const char *ignored,
       mariaDbPasswordHashTypeNames[passwordHashType]);
     return NULL;
   }
+  mariaDb->socketMetadata = dictionaryCreate(typePointerNoOwn);
+  if (mariaDb->socketMetadata == NULL) {
+    tss_delete(mariaDb->transactionCount);
+    tss_delete(mariaDb->tablesLocked);
+    tss_delete(mariaDb->transactionInProgress);
+    cnd_destroy(&mariaDb->socketAvailable);
+    mtx_destroy(&mariaDb->lock);
+    mariaDb->remoteHostAddress = stringDestroy(mariaDb->remoteHostAddress);
+    mariaDb->username = stringDestroy(mariaDb->username);
+    mariaDb->password = stringDestroy(mariaDb->password);
+    mariaDb->availableDbSockets = queueDestroy(mariaDb->availableDbSockets);
+    mariaDb = (MariaDb*) pointerDestroy(mariaDb);
+    LOG_MALLOC_FAILURE();
+    printLog(TRACE,
+      "EXIT mariaDbInit(remoteHostAddress=\"%s\", username=\"%s\", "
+      "password=\"%s\", passwordHashType=%s) = {NULL}\n",
+      remoteHostAddress, username, password,
+      mariaDbPasswordHashTypeNames[passwordHashType]);
+    return NULL;
+  }
   
   
   // SqlDatabase-level object.
   SqlDatabase *sqlDatabase = (SqlDatabase*) malloc(sizeof(SqlDatabase));
   if (sqlDatabase == NULL) {
+    mariaDb->socketMetadata = dictionaryDestroy(mariaDb->socketMetadata);
     tss_delete(mariaDb->transactionCount);
     tss_delete(mariaDb->tablesLocked);
     tss_delete(mariaDb->transactionInProgress);
@@ -795,6 +871,7 @@ Database* mariaDbInit_(const char *ignored,
   database->getFieldTypeByName = sqlGetFieldTypeByName;
   database->getFieldTypeByIndex = sqlGetFieldTypeByIndex;
   database->renameDatabase = mariaDbRenameDatabase;
+  database->ensureFieldIndexed = mariaDbEnsureFieldIndexed;
   database->db = sqlDatabase;
   database->dbType = SQL;
   
@@ -981,6 +1058,23 @@ Socket* getDbClientSocket(MariaDb *database) {
         }
       }
       mtx_unlock(&database->lock);
+    }
+  }
+  
+  if (dbClientSocket != NULL) {
+    printLog(DEBUG, "Got socket %p\n", dbClientSocket);
+    SocketMetadata *socketMetadata = (SocketMetadata*) dictionaryGetValue(
+      database->socketMetadata, dbClientSocket);
+    if (socketMetadata != NULL) {
+      printLog(DEBUG, "Using socket from previous thread %llu.\n",
+        llu(socketMetadata->previousThread));
+      socketMetadata->previousThread = thrd_current();
+    } else {
+      printLog(DEBUG, "No socketMetadata for socket.  Creating.\n");
+      socketMetadata = (SocketMetadata*) calloc(1, sizeof(SocketMetadata));
+      dictionaryAddEntry(&database->socketMetadata, dbClientSocket,
+        socketMetadata, typePointer);
+      socketMetadata->previousThread = thrd_current();
     }
   }
   
@@ -1316,7 +1410,7 @@ int mariaDbConnect(const char *remoteHostAddress,
   // Get the server's handshake initialization
   int bytesReceived = 0;
   if ((bytesReceived = socketReceive(dbClientSocket, response, sizeof(response))) < 3) {
-    dbClientSocket = socketDestroy(dbClientSocket);
+    dbClientSocket = destroyDbClientSocket(dbClientSocket);
     printLog(ERR, "Could not get server's initial handshake packet.\n");
     printLog(TRACE,
       "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1341,7 +1435,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     &pluginDataLength) != 0
   ) {
     printLog(ERR, "Could not parse server handshake packet.\n");
-    dbClientSocket = socketDestroy(dbClientSocket);
+    dbClientSocket = destroyDbClientSocket(dbClientSocket);
     printLog(ERR, "Could not get server's initial handshake packet.\n");
     printLog(TRACE,
       "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1392,7 +1486,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     ) {
       // Communication error.
       printLog(ERR, "Could not send SSL Request Packet to server.\n");
-      dbClientSocket = socketDestroy(dbClientSocket);
+      dbClientSocket = destroyDbClientSocket(dbClientSocket);
       printLog(ERR, "Could not configure the socket for TLS.\n");
       printLog(TRACE,
         "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1404,7 +1498,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     
     if (configureTlsClientSocket(dbClientSocket, 30000) != 0) {
       // We're toast.
-      dbClientSocket = socketDestroy(dbClientSocket);
+      dbClientSocket = destroyDbClientSocket(dbClientSocket);
       printLog(ERR, "Could not configure the socket for TLS.\n");
       printLog(TRACE,
         "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1574,7 +1668,7 @@ int mariaDbConnect(const char *remoteHostAddress,
   
   if (bytesReceived < 4) {
     printLog(ERR, "Invalid response from server.\n");
-    dbClientSocket = socketDestroy(dbClientSocket);
+    dbClientSocket = destroyDbClientSocket(dbClientSocket);
     returnValue = -2;
     // remoteHostAddress may have been freed when we freed *connectionAddress,
     // so use its pointer here.
@@ -1599,7 +1693,7 @@ int mariaDbConnect(const char *remoteHostAddress,
   
   if (packetLength < 1) {
     printLog(ERR, "Invalid response from server.\n");
-    dbClientSocket = socketDestroy(dbClientSocket);
+    dbClientSocket = destroyDbClientSocket(dbClientSocket);
     returnValue = -2;
     printLog(TRACE,
       "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1675,7 +1769,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     printLog(DEBUG, "Received %d-byte response from server\n", bytesReceived);
     if (bytesReceived < 4) {
       printLog(ERR, "Invalid response from server.\n");
-      dbClientSocket = socketDestroy(dbClientSocket);
+      dbClientSocket = destroyDbClientSocket(dbClientSocket);
       returnValue = -2;
       printLog(TRACE,
         "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1698,7 +1792,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     
     if (packetLength < 1) {
       printLog(ERR, "Invalid response from server.\n");
-      dbClientSocket = socketDestroy(dbClientSocket);
+      dbClientSocket = destroyDbClientSocket(dbClientSocket);
       returnValue = -2;
       printLog(TRACE,
         "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1731,13 +1825,12 @@ int mariaDbConnect(const char *remoteHostAddress,
     
     printLog(ERR, "Could not login to database server at \"%s\"\n",
       remoteHostAddress);
-    dbClientSocket = socketDestroy(dbClientSocket);
+    dbClientSocket = destroyDbClientSocket(dbClientSocket);
     returnValue = -2;
   }
   
   totalPacket = stringDestroy(totalPacket);
-  tss_set(_threadClientSocket,
-    socketDestroy((Socket*) tss_get(_threadClientSocket)));
+  destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
   tss_set(_threadClientSocket, dbClientSocket);
   
   printLog(TRACE,
@@ -1918,8 +2011,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
       mariaDbBuffer, DB_PACKET_HEADER_LENGTH + bytesToSend);
     while ((sendResult <= 0) && (dbClientSocket != NULL)) {
       // Try a different connection to the database from the connection pool.
-      tss_set(_threadClientSocket,
-        socketDestroy((Socket*) tss_get(_threadClientSocket)));
+      destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
       if (mariaDbConnect(database->remoteHostAddress,
         database->username, database->password, database->passwordHashType,
         &database->remoteHostAddress) == 0
@@ -1955,8 +2047,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
       mariaDbBuffer, DB_PACKET_HEADER_LENGTH + 1);
     while ((sendResult <= 0) && (dbClientSocket != NULL)) {
       // Try a different connection to the database from the connection pool.
-      tss_set(_threadClientSocket,
-        socketDestroy((Socket*) tss_get(_threadClientSocket)));
+      destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
       if (mariaDbConnect(database->remoteHostAddress,
         database->username, database->password, database->passwordHashType,
         &database->remoteHostAddress) == 0
@@ -2099,8 +2190,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
     printLog(ERR, "Out-of-sequence packet received from server.\n");
     printLog(DEBUG, "Expected 1 but got %d\n", packetNumber);
     response = (unsigned char*) pointerDestroy(response);
-    tss_set(_threadClientSocket,
-      socketDestroy((Socket*) tss_get(_threadClientSocket)));
+    destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
     mtx_lock(&database->lock);
     if (database->numConnections > 0) {
       database->numConnections--;
@@ -2951,8 +3041,7 @@ u64 mariaDbGetLengthEncodedInteger(
   if ((numRetries == 3) || (tss_get(_threadClientSocket) == NULL)) {
     printLog(ERR, "Insufficient data from MariaDB server.\n");
     // Close the socket for this thread.
-    tss_set(_threadClientSocket,
-      socketDestroy((Socket*) tss_get(_threadClientSocket)));
+    destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
     printLog(FLOOD,
       "EXIT mariaDbGetLengthEncodedInteger(packetData=%p, index=%p, "
       "bytesReceived=%p) = {%llu}\n",
@@ -2987,8 +3076,7 @@ u64 mariaDbGetLengthEncodedInteger(
     if ((numRetries == 3) || (tss_get(_threadClientSocket) == NULL)) {
       printLog(ERR, "Insufficient data from MariaDB server.\n");
       // Close the socket for this thread.
-      tss_set(_threadClientSocket,
-        socketDestroy((Socket*) tss_get(_threadClientSocket)));
+      destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
       printLog(FLOOD,
         "EXIT mariaDbGetLengthEncodedInteger(packetData=%p, index=%p, "
         "bytesReceived=%p) = {%llu}\n",
@@ -3014,8 +3102,7 @@ u64 mariaDbGetLengthEncodedInteger(
     if ((numRetries == 3) || (tss_get(_threadClientSocket) == NULL)) {
       printLog(ERR, "Insufficient data from MariaDB server.\n");
       // Close the socket for this thread.
-      tss_set(_threadClientSocket,
-        socketDestroy((Socket*) tss_get(_threadClientSocket)));
+      destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
       printLog(FLOOD,
         "EXIT mariaDbGetLengthEncodedInteger(packetData=%p, index=%p, "
         "bytesReceived=%p) = {%llu}\n",
@@ -3043,8 +3130,7 @@ u64 mariaDbGetLengthEncodedInteger(
     if ((numRetries == 3) || (tss_get(_threadClientSocket) == NULL)) {
       printLog(ERR, "Insufficient data from MariaDB server.\n");
       // Close the socket for this thread.
-      tss_set(_threadClientSocket,
-        socketDestroy((Socket*) tss_get(_threadClientSocket)));
+      destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
       printLog(FLOOD,
         "EXIT mariaDbGetLengthEncodedInteger(packetData=%p, index=%p, "
         "bytesReceived=%p) = {%llu}\n",
@@ -3113,8 +3199,7 @@ int mariaDbGetDataFromServer(u8 **response, u32 *bytesReceived) {
     // continue.
     printLog(ERR, "Received %d Bytes from server.  Destroying socket.\n",
       packetBytes);
-    tss_set(_threadClientSocket,
-      socketDestroy((Socket*) tss_get(_threadClientSocket)));
+    destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
     dbClientSocket = NULL;
   }
   
@@ -4103,6 +4188,7 @@ SqlDatabase* mariaDbDisconnect(SqlDatabase *sqlDatabase) {
     tss_delete(mariaDb->transactionInProgress);
     tss_delete(mariaDb->tablesLocked);
     tss_delete(mariaDb->transactionCount);
+    mariaDb->socketMetadata = dictionaryDestroy(mariaDb->socketMetadata);
     mariaDb = (MariaDb*) pointerDestroy(mariaDb);
   }
   
@@ -4577,6 +4663,14 @@ bool mariaDbCommitTransaction(SqlDatabase *database) {
   
   bool querySuccessful = true;
   MariaDb *mariaDb = (MariaDb*) database->connection;
+  if (tssEqual(mariaDb->transactionCount, 0)) {
+    printLog(WARN,
+      "Request to commit transaction when no transaction in progress.\n");
+    printLog(TRACE, "EXIT mariaDbCommitTransaction(database=%p) = {%s}\n",
+      database, (querySuccessful) ? "successful" : "NOT successful");
+    return true;
+  }
+  
   tssDec(mariaDb->transactionCount);
   if (tssEqual(mariaDb->transactionCount, 0)) {
     DbResult *queryResult = database->stringQuery(database->connection, "commit;");
@@ -4620,6 +4714,14 @@ bool mariaDbRollbackTransaction(SqlDatabase *database) {
   
   bool querySuccessful = true;
   MariaDb *mariaDb = (MariaDb*) database->connection;
+  if (tssEqual(mariaDb->transactionCount, 0)) {
+    printLog(WARN,
+      "Request to rollback transaction when no transaction in progress.\n");
+    printLog(TRACE, "EXIT mariaDbRollbackTransaction(database=%p) = {%s}\n",
+      database, (querySuccessful) ? "successful" : "NOT successful");
+    return true;
+  }
+  
   tssDec(mariaDb->transactionCount);
   if (tssEqual(mariaDb->transactionCount, 0)) {
     DbResult *queryResult = database->stringQuery(database->connection, "rollback;");
@@ -4734,6 +4836,15 @@ bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
   
   bool querySuccessful = true;
   MariaDb *mariaDb = (MariaDb*) database->connection;
+  if (tssEqual(mariaDb->transactionCount, 0)) {
+    printLog(WARN,
+      "Request to unlock tables when no transaction in progress.\n");
+    printLog(TRACE,
+      "EXIT mariaDbUnlockTables(database=%p, tableLock=%p) = {NOT successful}\n",
+      database, tableLock);
+    return true;
+  }
+  
   tssDec(mariaDb->transactionCount);
   if (tssEqual(mariaDb->transactionCount, 0)) {
     DbResult *queryResult = database->stringQuery(database->connection, "commit;");
@@ -4749,6 +4860,50 @@ bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
   printLog(TRACE, "EXIT mariaDbUnlockTables(database=%p, tableLock=%p) = {%s}\n",
     database, tableLock,
     (querySuccessful == true) ? "successful" : "NOT successful");
+  return querySuccessful;
+}
+
+/// @fn bool mariaDbEnsureFieldIndexed(void *database, const Dictionary *tableLock)
+///
+/// @brief Ensure that a particular field in a table is indexed by the database.
+///
+/// @param database A pointer to the SqlDatabase object representing the database
+///   system to query.
+/// @param dbName The name of the database that the table is in.
+/// @param tableName The name of the table the field is in.
+/// @param fieldName The name of the field to make sure is indexed.
+///
+/// @return Returns true on success, false on failure.
+bool mariaDbEnsureFieldIndexed(void *database,
+  const char *dbName, const char *tableName, const char *fieldName
+) {
+  SCOPE_ENTER("database=%p, dbName=%s, tableName=%s, fieldName=%s",
+    database, dbName, tableName, fieldName);
+  
+  bool querySuccessful = false;
+  if ((database == NULL) || (dbName == NULL)
+    || (tableName == NULL) || (fieldName == NULL)
+  ) {
+    // Nothing to do.
+    printLog(ERR, "One or more NULL parameters.\n");
+    SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
+      database, dbName, tableName, fieldName, boolNames[querySuccessful]);
+    return querySuccessful;
+  }
+  
+  SqlDatabase *sqlDatabase = (SqlDatabase*) database;
+  Bytes query = NULL;
+  (void) abprintf(&query, "CREATE INDEX IF NOT EXISTS %s_%s_%s ON %s.%s(%s);",
+    dbName, tableName, fieldName, dbName, tableName, fieldName);
+  scopeAdd(query, bytesDestroy);
+  
+  DbResult *queryResult
+    = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
+  querySuccessful = queryResult->successful;
+  queryResult = dbFreeResult(queryResult);
+  
+  SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
+    database, dbName, tableName, fieldName, boolNames[querySuccessful]);
   return querySuccessful;
 }
 
@@ -4955,3 +5110,4 @@ sha1digest(uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databyt
 
   return 0;
 }  /* End of sha1digest() */
+

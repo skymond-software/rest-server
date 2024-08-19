@@ -187,6 +187,9 @@ typedef enum MariaDbPasswordHashType {
 /// @param transactionCount The number of start transaction calls that have been
 ///   made without a corresponding call to rollback or commit.  This is thread-
 ///   specific storage, so counts are on a per-thread basis.
+/// @param socketMetadata Dictionary with socket pointers as keys that serves as
+///   a lookup mechanism for debug metadata for sockets used to connect to the
+///   MariaDB server.
 typedef struct MariaDb {
   char *remoteHostAddress;
   char *username;
@@ -200,6 +203,7 @@ typedef struct MariaDb {
   tss_t transactionInProgress;
   tss_t tablesLocked;
   tss_t transactionCount;
+  Dictionary *socketMetadata;
 } MariaDb;
 
 // External API.

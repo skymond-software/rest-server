@@ -222,6 +222,8 @@ typedef struct Database {
     const char *dbName, const char *tableName, u64 fieldIndex);
   bool (*renameDatabase)(void *db,
     const char *oldDbName, const char *newDbName);
+  bool (*ensureFieldIndexed)(void *db,
+    const char *dbName, const char *tableName, const char *fieldName);
   tss_t threadLockedTables;
   mtx_t lockedTablesMutex;
   cnd_t lockedTablesCondition;
@@ -481,6 +483,8 @@ TypeDescriptor* dbGetFieldTypeByIndex(Database *database,
 bool dbRenameDatabase(Database *database,
   const char *oldDbName, const char *newDbName);
 DbResult* dbResultGetRange(DbResult *inputResult, u64 startIndex, u64 endIndex);
+bool dbEnsureFieldIndexed(Database *database,
+  const char *dbName, const char *tableName, const char *fieldName);
 
 
 #ifdef __cplusplus
