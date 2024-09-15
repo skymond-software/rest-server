@@ -222,8 +222,9 @@ typedef struct Database {
     const char *dbName, const char *tableName, u64 fieldIndex);
   bool (*renameDatabase)(void *db,
     const char *oldDbName, const char *newDbName);
-  bool (*ensureFieldIndexed)(void *db,
-    const char *dbName, const char *tableName, const char *fieldName);
+  bool (*ensureFieldIndexedVargs)(void *db,
+    const char *dbName, const char *tableName, const char *fieldName,
+    va_list args);
   tss_t threadLockedTables;
   mtx_t lockedTablesMutex;
   cnd_t lockedTablesCondition;
@@ -483,8 +484,11 @@ TypeDescriptor* dbGetFieldTypeByIndex(Database *database,
 bool dbRenameDatabase(Database *database,
   const char *oldDbName, const char *newDbName);
 DbResult* dbResultGetRange(DbResult *inputResult, u64 startIndex, u64 endIndex);
-bool dbEnsureFieldIndexed(Database *database,
-  const char *dbName, const char *tableName, const char *fieldName);
+bool dbEnsureFieldIndexed_(Database *database,
+  const char *dbName, const char *tableName, const char *fieldName, ...);
+#define dbEnsureFieldIndexed(database, dbName, tableName, fieldName, ...) \
+  dbEnsureFieldIndexed_(database, dbName, tableName, fieldName, \
+    ##__VA_ARGS__, NULL)
 
 
 #ifdef __cplusplus

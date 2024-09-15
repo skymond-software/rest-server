@@ -73,8 +73,11 @@ bool mariaDbAddDatabase(SqlDatabase *database, const char *dbName);
 bool mariaDbDeleteDatabase(SqlDatabase *database, const char *dbName);
 Bytes mariaDbMakeStringLiteral(const char *input);
 Bytes mariaDbMakeBytesLiteral(const Bytes input);
-bool mariaDbEnsureFieldIndexed(void *database,
-  const char *dbName, const char *tableName, const char *fieldName);
+bool mariaDbEnsureFieldIndexedVargs(void *database,
+  const char *dbName, const char *tableName, const char *fieldName,
+  va_list args);
+bool mariaDbAddRecords(void *database,
+  const char *dbName, const char *tableName, const DbResult *dbResult);
 
 char *mariaDbDecodeErrorPacket(u8 *response, u32 responseLength,
   u16 *errorCode, char **sqlState);
@@ -860,7 +863,7 @@ Database* mariaDbInit_(const char *ignored,
   database->disconnect = (void* (*)(void*)) mariaDbDisconnect;
   database->describeTable = (DbResult* (*)(void *database, const char *dbName,
     const char *tableName)) sqlDescribeTable;
-  database->addRecords = sqlAddRecords;
+  database->addRecords = mariaDbAddRecords;
   database->renameTable = (bool (*)(void *database, const char *dbName,
     const char *oldTableName, const char *newTableName)) sqlRenameTable;
   database->compare = sqlCompare;
@@ -871,7 +874,7 @@ Database* mariaDbInit_(const char *ignored,
   database->getFieldTypeByName = sqlGetFieldTypeByName;
   database->getFieldTypeByIndex = sqlGetFieldTypeByIndex;
   database->renameDatabase = mariaDbRenameDatabase;
-  database->ensureFieldIndexed = mariaDbEnsureFieldIndexed;
+  database->ensureFieldIndexedVargs = mariaDbEnsureFieldIndexedVargs;
   database->db = sqlDatabase;
   database->dbType = SQL;
   
@@ -1668,6 +1671,7 @@ int mariaDbConnect(const char *remoteHostAddress,
   
   if (bytesReceived < 4) {
     printLog(ERR, "Invalid response from server.\n");
+    authenticationPluginName = stringDestroy(authenticationPluginName);
     dbClientSocket = destroyDbClientSocket(dbClientSocket);
     returnValue = -2;
     // remoteHostAddress may have been freed when we freed *connectionAddress,
@@ -1693,6 +1697,7 @@ int mariaDbConnect(const char *remoteHostAddress,
   
   if (packetLength < 1) {
     printLog(ERR, "Invalid response from server.\n");
+    authenticationPluginName = stringDestroy(authenticationPluginName);
     dbClientSocket = destroyDbClientSocket(dbClientSocket);
     returnValue = -2;
     printLog(TRACE,
@@ -1770,6 +1775,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     if (bytesReceived < 4) {
       printLog(ERR, "Invalid response from server.\n");
       dbClientSocket = destroyDbClientSocket(dbClientSocket);
+      authenticationPluginName = stringDestroy(authenticationPluginName);
       returnValue = -2;
       printLog(TRACE,
         "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -1793,6 +1799,7 @@ int mariaDbConnect(const char *remoteHostAddress,
     if (packetLength < 1) {
       printLog(ERR, "Invalid response from server.\n");
       dbClientSocket = destroyDbClientSocket(dbClientSocket);
+      authenticationPluginName = stringDestroy(authenticationPluginName);
       returnValue = -2;
       printLog(TRACE,
         "EXIT mariaDbConnect(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -2012,13 +2019,13 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
     while ((sendResult <= 0) && (dbClientSocket != NULL)) {
       // Try a different connection to the database from the connection pool.
       destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
+      mtx_lock(&database->lock);
       if (mariaDbConnect(database->remoteHostAddress,
         database->username, database->password, database->passwordHashType,
         &database->remoteHostAddress) == 0
       ) {
         printLog(ERR, "Could not reconnect to database.\n");
         dbClientSocket = NULL;
-        mtx_lock(&database->lock);
         if (database->numConnections > 0) {
           database->numConnections--;
         }
@@ -2026,6 +2033,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
         mtx_unlock(&database->lock);
         break;
       }
+      mtx_unlock(&database->lock);
       // _threadClientSocket is now set.
       dbClientSocket = (Socket*) tss_get(_threadClientSocket);
       sendResult = socketSend(dbClientSocket,
@@ -2048,6 +2056,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
     while ((sendResult <= 0) && (dbClientSocket != NULL)) {
       // Try a different connection to the database from the connection pool.
       destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
+      mtx_lock(&database->lock);
       if (mariaDbConnect(database->remoteHostAddress,
         database->username, database->password, database->passwordHashType,
         &database->remoteHostAddress) == 0
@@ -2062,6 +2071,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
         mtx_unlock(&database->lock);
         break;
       }
+      mtx_unlock(&database->lock);
       // _threadClientSocket is now set.
       dbClientSocket = (Socket*) tss_get(_threadClientSocket);
       sendResult = socketSend(dbClientSocket,
@@ -2190,14 +2200,14 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
     printLog(ERR, "Out-of-sequence packet received from server.\n");
     printLog(DEBUG, "Expected 1 but got %d\n", packetNumber);
     response = (unsigned char*) pointerDestroy(response);
-    destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
+    dbClientSocket
+      = destroyDbClientSocket((Socket*) tss_get(_threadClientSocket));
     mtx_lock(&database->lock);
     if (database->numConnections > 0) {
       database->numConnections--;
     }
     cnd_signal(&database->socketAvailable);
     mtx_unlock(&database->lock);
-    dbClientSocket = NULL;
     printLog(TRACE,
       "EXIT _mariaDbExecQuery(query=%p) = {successful = false}\n",
       query);
@@ -4863,7 +4873,7 @@ bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
   return querySuccessful;
 }
 
-/// @fn bool mariaDbEnsureFieldIndexed(void *database, const Dictionary *tableLock)
+/// @fn bool mariaDbEnsureFieldIndexedVargs(void *database, const char *dbName, const char *tableName, const char *fieldName, va_list args)
 ///
 /// @brief Ensure that a particular field in a table is indexed by the database.
 ///
@@ -4872,10 +4882,13 @@ bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
 /// @param dbName The name of the database that the table is in.
 /// @param tableName The name of the table the field is in.
 /// @param fieldName The name of the field to make sure is indexed.
+/// @param args A va_list of all the arguments aferr the fieldName, terminating
+///   with a NULL pointer.
 ///
 /// @return Returns true on success, false on failure.
-bool mariaDbEnsureFieldIndexed(void *database,
-  const char *dbName, const char *tableName, const char *fieldName
+bool mariaDbEnsureFieldIndexedVargs(void *database,
+  const char *dbName, const char *tableName, const char *fieldName,
+  va_list args
 ) {
   SCOPE_ENTER("database=%p, dbName=%s, tableName=%s, fieldName=%s",
     database, dbName, tableName, fieldName);
@@ -4891,10 +4904,66 @@ bool mariaDbEnsureFieldIndexed(void *database,
     return querySuccessful;
   }
   
+  va_list args2;
+  va_copy(args2, args);
+  
+  Bytes fullFieldName = NULL;
+  Bytes fullIndexName = NULL;
+  bytesAddStr(&fullFieldName, fieldName);
+  bytesAddStr(&fullIndexName, dbName);
+  bytesAddStr(&fullIndexName, "_");
+  bytesAddStr(&fullIndexName, tableName);
+  bytesAddStr(&fullIndexName, "_");
+  bytesAddStr(&fullIndexName, fieldName);
+  u64 numFields = 1;
+  for (char *nextFieldName = va_arg(args, char*);
+    nextFieldName != NULL;
+    nextFieldName = va_arg(args, char*)
+  ) {
+    bytesAddStr(&fullFieldName, ", ");
+    bytesAddStr(&fullFieldName, nextFieldName);
+    bytesAddStr(&fullIndexName, "_");
+    bytesAddStr(&fullIndexName, nextFieldName);
+    numFields++;
+  }
+  scopeAdd(fullFieldName, bytesDestroy);
+  
+  if (bytesLength(fullIndexName) > 64) {
+    // We need to adjust the index name.  The maximum length for one in MariaDB
+    // is 64 characters.  The total number of elements that makes up the index
+    // name is the number of fields plus 1 for the DB name and 1 for the table
+    // name.
+    u64 elementNameLength = 64 / (numFields + 2);
+    while (elementNameLength < 2) {
+      // Adjust until we have a length we can work with.
+      numFields--;
+      elementNameLength = 64 / (numFields + 2);
+    }
+    // We need to reduce the elementNameLength by one to account for the
+    // underscore between element names.
+    elementNameLength--;
+    
+    fullIndexName = bytesDestroy(fullIndexName);
+    bytesAddData(&fullIndexName, dbName, elementNameLength);
+    bytesAddData(&fullIndexName, "_", 1);
+    bytesAddData(&fullIndexName, tableName, elementNameLength);
+    bytesAddData(&fullIndexName, "_", 1);
+    bytesAddData(&fullIndexName, fieldName, elementNameLength);
+    
+    for (u64 ii = 0; ii < numFields; ii++) {
+      char *nextFieldName = va_arg(args2, char*);
+      bytesAddData(&fullIndexName, "_", 1);
+      bytesAddData(&fullIndexName, nextFieldName, elementNameLength);
+    }
+  }
+  
+  scopeAdd(fullIndexName, bytesDestroy);
+  va_end(args2);
+  
   SqlDatabase *sqlDatabase = (SqlDatabase*) database;
   Bytes query = NULL;
-  (void) abprintf(&query, "CREATE INDEX IF NOT EXISTS %s_%s_%s ON %s.%s(%s);",
-    dbName, tableName, fieldName, dbName, tableName, fieldName);
+  (void) abprintf(&query, "CREATE INDEX IF NOT EXISTS %s ON %s.%s(%s);",
+    fullIndexName, dbName, tableName, fullFieldName);
   scopeAdd(query, bytesDestroy);
   
   DbResult *queryResult
@@ -4905,6 +4974,191 @@ bool mariaDbEnsureFieldIndexed(void *database,
   SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
     database, dbName, tableName, fieldName, boolNames[querySuccessful]);
   return querySuccessful;
+}
+
+/// @fn bool mariaDbAddRecords(void *database, const char *dbName, const char *tableName, const DbResult *dbResut)
+///
+/// @brief Add a group of records to a table in a database.
+///
+/// @param database A pointer to the SqlDatabase object representing the
+///   database system to query cast to a void*.
+/// @param dbName The name of the database the table is in.
+/// @param tableName The name of the table to add a record to.
+/// @param dbResult A DbResult that contains the records to add.
+///
+/// @return Returns true on success, false on failure.
+bool mariaDbAddRecords(void *database,
+  const char *dbName, const char *tableName, const DbResult *dbResult
+) {
+  printLog(TRACE,
+    "ENTER mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\")\n",
+    database, dbName, tableName);
+  
+  if ((database == NULL) || (dbName == NULL) || (tableName == NULL)) {
+    printLog(ERR, "One or more NULL parameters.\n");
+    printLog(TRACE,
+      "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+      "= {NOT successful}\n", database, dbName, tableName);
+    return false;
+  } else if ((dbResult == NULL) || (dbResult->numResults == 0)) {
+    // Not an error, but nothing to do.
+    printLog(TRACE,
+      "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+      "= {successful}\n", database, dbName, tableName);
+    return true;
+  }
+  
+  SqlDatabase *sqlDatabase = (SqlDatabase*) database;
+  bool returnValue = false;
+  DbResult *queryResult = NULL;
+  
+  Bytes query = NULL;
+  
+  int typeLongDoubleIndex = getIndexFromTypeDescriptor(typeLongDouble);
+  int typeStringCiNoCopyIndex = getIndexFromTypeDescriptor(typeStringCiNoCopy);
+  int typeBytesNoCopyIndex = getIndexFromTypeDescriptor(typeBytesNoCopy);
+  
+  returnValue = false;
+  
+  bytesAddStr(&query, "insert ignore into ");
+  bytesAddStr(&query, dbName);
+  bytesAddStr(&query, dbInstance);
+  bytesAddStr(&query, ".");
+  bytesAddStr(&query, tableName);
+  bytesAddStr(&query, " values ");
+  
+  u64 numResults = dbResult->numResults;
+  u64 numFields = dbResult->numFields;
+  TypeDescriptor **fieldTypes = dbResult->fieldTypes;
+  for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
+    bytesAddStr(&query, "(");
+    for (u64 fieldIndex = 0; fieldIndex < numFields; fieldIndex++) {
+      void *fieldValue
+        = dbGetResultByIndex(dbResult, recordIndex, fieldIndex, NULL);
+      TypeDescriptor *fieldType = fieldTypes[fieldIndex];
+      printLog(DEBUG, "Field (%s, %s, %llu) is of type \"%s\".\n",
+        dbName, tableName, llu(fieldIndex),
+        (fieldType != NULL) ? fieldType->name : "NULL");
+      int fieldTypeIndex = getIndexFromTypeDescriptor(fieldType);
+      if ((fieldTypeIndex < 0) || (fieldTypeIndex > typeBytesNoCopyIndex)) {
+        printLog(ERR, "Invalid field type.\n");
+        query = bytesDestroy(query);
+        returnValue = false;
+        printLog(TRACE,
+          "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+          "= {%s}\n", database, dbName, tableName,
+          (returnValue == true) ? "record added" : "record NOT added");
+        return returnValue;
+      }
+      
+      if (fieldValue != NULL) {
+        Bytes escapedValue = NULL;
+        if (fieldTypeIndex <= typeLongDoubleIndex) {
+          // Numeric value.  Convert to string and use the literal.
+          char *stringValue = fieldType->toString(fieldValue);
+          bytesAddStr(&escapedValue, stringValue);
+          stringValue = stringDestroy(stringValue);
+        } else if (fieldTypeIndex <= typeStringCiNoCopyIndex) {
+          escapedValue = sqlDatabase->makeStringLiteral(str(fieldValue));
+        } else { // fieldTypeIndex <= typeBytesNoCopyIndex
+          escapedValue = sqlDatabase->makeBytesLiteral((Bytes) fieldValue);
+        }
+        bytesAddBytes(&query, escapedValue);
+        escapedValue = bytesDestroy(escapedValue);
+      } else {
+        bytesAddStr(&query, "NULL");
+      }
+      
+      if (fieldIndex < numFields - 1) {
+        bytesAddStr(&query, ", ");
+      }
+    }
+    bytesAddStr(&query, ")");
+    
+    if (recordIndex < numResults - 1) {
+      bytesAddStr(&query, ", ");
+    }
+  }
+  bytesAddStr(&query, ";");
+  
+  printLog(DEBUG, "Running query \"%s\"\n", str(query));
+  queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
+  query = bytesDestroy(query);
+  returnValue = queryResult->successful;
+  queryResult = dbFreeResult(queryResult);
+  
+  if (returnValue == false) {
+    // Bulk update failed.  Add what we can one-by-one.
+    // NOTE:  This does not change the overall return value since we still
+    // failed to add all the records, it just does a better job than giving
+    // up completely.  Only the caller knows whether a partial success is
+    // acceptable or not.
+    for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
+      bytesAddStr(&query, "insert ignore into ");
+      bytesAddStr(&query, dbName);
+      bytesAddStr(&query, dbInstance);
+      bytesAddStr(&query, ".");
+      bytesAddStr(&query, tableName);
+      bytesAddStr(&query, " values ");
+      bytesAddStr(&query, "(");
+      
+      for (u64 fieldIndex = 0; fieldIndex < numFields; fieldIndex++) {
+        void *fieldValue
+          = dbGetResultByIndex(dbResult, recordIndex, fieldIndex, NULL);
+        TypeDescriptor *fieldType = fieldTypes[fieldIndex];
+        printLog(DEBUG, "Field (%s, %s, %llu) is of type \"%s\".\n",
+          dbName, tableName, llu(fieldIndex),
+          (fieldType != NULL) ? fieldType->name : "NULL");
+        int fieldTypeIndex = getIndexFromTypeDescriptor(fieldType);
+        if ((fieldTypeIndex < 0) || (fieldTypeIndex > typeBytesNoCopyIndex)) {
+          printLog(ERR, "Invalid field type.\n");
+          query = bytesDestroy(query);
+          returnValue = false;
+          printLog(TRACE,
+            "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+            "= {%s}\n", database, dbName, tableName,
+            (returnValue == true) ? "record added" : "record NOT added");
+          return returnValue;
+        }
+        
+        if (fieldValue != NULL) {
+          Bytes escapedValue = NULL;
+          if (fieldTypeIndex <= typeLongDoubleIndex) {
+            // Numeric value.  Convert to string and use the literal.
+            char *stringValue = fieldType->toString(fieldValue);
+            bytesAddStr(&escapedValue, stringValue);
+            stringValue = stringDestroy(stringValue);
+          } else if (fieldTypeIndex <= typeStringCiNoCopyIndex) {
+            escapedValue = sqlDatabase->makeStringLiteral(str(fieldValue));
+          } else { // fieldTypeIndex <= typeBytesNoCopyIndex
+            escapedValue = sqlDatabase->makeBytesLiteral((Bytes) fieldValue);
+          }
+          bytesAddBytes(&query, escapedValue);
+          escapedValue = bytesDestroy(escapedValue);
+        } else {
+          bytesAddStr(&query, "NULL");
+        }
+        
+        if (fieldIndex < numFields - 1) {
+          bytesAddStr(&query, ", ");
+        }
+      }
+      bytesAddStr(&query, ");");
+      
+      printLog(DEBUG, "Running query \"%s\"\n", str(query));
+      queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
+      query = bytesDestroy(query);
+      // We don't care about the success of the operation.  Our return value is
+      // going to be false regardless of what was returned here.
+      queryResult = dbFreeResult(queryResult);
+    }
+  }
+  
+  printLog(TRACE,
+    "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+    "= {%s}\n", database, dbName, tableName,
+    (returnValue == true) ? "successful" : "NOT successful");
+  return returnValue;
 }
 
 // Taken from https://github.com/CTrabant/teeny-sha1/blob/main/teeny-sha1.c

@@ -639,6 +639,12 @@ bool dbDeleteRecords_(Database *database, const char *dbName, const char *tableN
 Bytes** dbResultToBytesTable(DbResult *dbResult) {
   printLog(TRACE, "ENTER dbResultToBytesTable())\n");
   
+  if ((dbResult == NULL) || (dbResult->numRows == 0)) {
+    // Nothing to do.
+    printLog(TRACE, "EXIT dbResultToBytesTable() = {NULL})\n");
+    return NULL;
+  }
+  
   Bytes **returnValue = (Bytes**) calloc(1,
     (dbResult->numRows + 1) * sizeof(Bytes*));
   if (returnValue == NULL) {
@@ -647,7 +653,28 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
     return NULL;
   }
   
-  for (u64 i = 0; i < dbResult->numRows; i++) {
+  // We're guaranteed that there is at least one row (because of the if at the
+  // start of the function) and the first row is always the name of the fields,
+  // which are Bytes objects.  Process those first since they don't adhere to
+  // the types defined by the fieldTypes array.
+  returnValue[0] = (Bytes*) calloc(1,
+    (dbResult->numFields + 1) * sizeof(Bytes));
+  for (u64 j = 0; j < dbResult->numFields; j++) {
+    // returnValue[i][j] is set to NULL by calloc
+    bytesAddBytes(&returnValue[0][j], (Bytes) dbResult->rows[0][j]);
+    if (returnValue[0][j] == NULL) {
+      LOG_MALLOC_FAILURE();
+      for (u64 k = 0; k < j; k++) {
+        returnValue[0][k] = bytesDestroy(returnValue[0][k]);
+      }
+      returnValue[0] = (Bytes*) pointerDestroy(returnValue[0]);
+      returnValue = (Bytes**) pointerDestroy(returnValue);
+      printLog(NEVER, "EXIT dbResultToBytesTable() = {NULL})\n");
+      return NULL;
+    }
+  }
+  
+  for (u64 i = 1; i < dbResult->numRows; i++) {
     returnValue[i] = (Bytes*) calloc(1,
       (dbResult->numFields + 1) * sizeof(Bytes));
     if (returnValue[i] == NULL) {
@@ -4414,7 +4441,7 @@ DbResult* dbResultGetRange(
   return outputResult;
 }
 
-/// @fn bool dbEnsureFieldIndexed(Database *database, const char *dbName, const char *tableName, const char *fieldName)
+/// @fn bool dbEnsureFieldIndexed_(Database *database, const char *dbName, const char *tableName, const char *fieldName, ...)
 ///
 /// @brief Ensure there is an index for a particular field in a database table.
 ///
@@ -4425,8 +4452,8 @@ DbResult* dbResultGetRange(
 /// @param fieldName The name of the field to make sure is indexed.
 ///
 /// @return Returns true on success, false on failure.
-bool dbEnsureFieldIndexed(Database *database,
-  const char *dbName, const char *tableName, const char *fieldName
+bool dbEnsureFieldIndexed_(Database *database,
+  const char *dbName, const char *tableName, const char *fieldName, ...
 ) {
   SCOPE_ENTER("database=%p, dbName=%s, tableName=%s, fieldName=%s",
     database, dbName, tableName, fieldName);
@@ -4436,9 +4463,13 @@ bool dbEnsureFieldIndexed(Database *database,
   straddstr(&dbWithInstance, dbName);
   straddstr(&dbWithInstance, dbInstance);
   scopeAdd(dbWithInstance, typeString->destroy);
+  
+  va_list args;
+  va_start(args, fieldName);
   bool returnValue
-    = database->ensureFieldIndexed(
-      database->db, dbWithInstance, tableName, fieldName);
+    = database->ensureFieldIndexedVargs(
+      database->db, dbWithInstance, tableName, fieldName, args);
+  va_end(args);
   
   SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
     database, dbName, tableName, fieldName, boolNames[returnValue]);

@@ -73,8 +73,11 @@ bool sqliteRenameTable(SqlDatabase *database, const char *dbName,
 i64 sqliteGetSize(void *db, const char *dbName);
 bool sqliteRenameDatabase(void *db,
   const char *oldDbName, const char *newDbName);
-bool sqliteEnsureFieldIndexed(void *database,
-  const char *dbName, const char *tableName, const char *fieldName);
+bool sqliteEnsureFieldIndexedVargs(void *database,
+  const char *dbName, const char *tableName, const char *fieldName,
+  va_list args);
+bool sqliteAddRecords(void *database,
+  const char *dbName, const char *tableName, const DbResult *dbResut);
 
 /// @var _sqliteThreadSetup
 ///
@@ -390,7 +393,7 @@ Database* sqliteInit(const char *databasePath) {
   database->disconnect = (void* (*)(void*)) sqliteDisconnect;
   database->describeTable = (DbResult* (*)(void *database, const char *dbName,
     const char *tableName)) sqlDescribeTable;
-  database->addRecords = sqlAddRecords;
+  database->addRecords = sqliteAddRecords;
   database->renameTable = (bool (*)(void *database, const char *dbName,
     const char *oldTableName, const char *newTableName)) sqliteRenameTable;
   database->compare = sqlCompare;
@@ -398,7 +401,7 @@ Database* sqliteInit(const char *databasePath) {
   database->getOrValuesDict = sqlGetOrValuesDict;
   database->getSize = sqliteGetSize;
   database->renameDatabase = sqliteRenameDatabase;
-  database->ensureFieldIndexed = sqliteEnsureFieldIndexed;
+  database->ensureFieldIndexedVargs = sqliteEnsureFieldIndexedVargs;
   database->updateFieldVargs = sqlUpdateFieldVargs;
   database->getFieldTypeByName = sqlGetFieldTypeByName;
   database->getFieldTypeByIndex = sqlGetFieldTypeByIndex;
@@ -2099,11 +2102,22 @@ bool sqliteAddField(SqlDatabase *database, const char *dbString,
     fieldIndex > beforeFieldIndex;
     fieldIndex--
   ) {
-    existingTable->fieldTypes[fieldIndex] = existingTable->fieldTypes[fieldIndex - 1];
+    existingTable->fieldTypes[fieldIndex]
+      = existingTable->fieldTypes[fieldIndex - 1];
   }
   if (strncmp(typeName, "VARCHAR", 7) != 0) {
     // The usual case.  type is a TypeDescriptor pointer.
     existingTable->fieldTypes[beforeFieldIndex] = (TypeDescriptor*) type;
+    
+    if ((type != typeString) && (type != typeBytes)) {
+      // Convert the new bytes field to a field of the correct type.
+      for (u64 ii = 1; ii < existingTable->numRows; ii++) {
+        existingTable->rows[ii][beforeFieldIndex]
+          = bytesDestroy((Bytes) existingTable->rows[ii][beforeFieldIndex]);
+        existingTable->rows[ii][beforeFieldIndex]
+          = existingTable->fieldTypes[beforeFieldIndex]->create(NULL);
+      }
+    }
   } else {
     // type was the number of characters in the VARCHAR.  Use typeStirng.
     existingTable->fieldTypes[beforeFieldIndex] = typeString;
@@ -2514,7 +2528,7 @@ addError:
   return returnValue;
 }
 
-/// @fn bool sqliteEnsureFieldIndexed(void *database, const Dictionary *tableLock)
+/// @fn bool sqliteEnsureFieldIndexedVargs(void *database, const char *dbName, const char *tableName, const char *fieldName, va_list args)
 ///
 /// @brief Ensure that a particular field in a table is indexed by the database.
 ///
@@ -2523,10 +2537,13 @@ addError:
 /// @param dbName The name of the database that the table is in.
 /// @param tableName The name of the table the field is in.
 /// @param fieldName The name of the field to make sure is indexed.
+/// @param args A va_list of all the arguments aferr the fieldName, terminating
+///   with a NULL pointer.
 ///
 /// @return Returns true on success, false on failure.
-bool sqliteEnsureFieldIndexed(void *database,
-  const char *dbName, const char *tableName, const char *fieldName
+bool sqliteEnsureFieldIndexedVargs(void *database,
+  const char *dbName, const char *tableName, const char *fieldName,
+  va_list args
 ) {
   SCOPE_ENTER("database=%p, dbName=%s, tableName=%s, fieldName=%s",
     database, dbName, tableName, fieldName);
@@ -2542,10 +2559,26 @@ bool sqliteEnsureFieldIndexed(void *database,
     return querySuccessful;
   }
   
+  Bytes fullFieldName = NULL;
+  Bytes fullIndexName = NULL;
+  bytesAddStr(&fullFieldName, fieldName);
+  bytesAddStr(&fullIndexName, fieldName);
+  for (char *nextFieldName = va_arg(args, char*);
+    nextFieldName != NULL;
+    nextFieldName = va_arg(args, char*)
+  ) {
+    bytesAddStr(&fullFieldName, ", ");
+    bytesAddStr(&fullFieldName, nextFieldName);
+    bytesAddStr(&fullIndexName, "_");
+    bytesAddStr(&fullIndexName, nextFieldName);
+  }
+  scopeAdd(fullFieldName, bytesDestroy);
+  scopeAdd(fullIndexName, bytesDestroy);
+  
   SqlDatabase *sqlDatabase = (SqlDatabase*) database;
   Bytes query = NULL;
   (void) abprintf(&query, "CREATE INDEX IF NOT EXISTS %s.%s_%s ON %s(%s);",
-    dbName, tableName, fieldName, tableName, fieldName);
+    dbName, tableName, fullIndexName, tableName, fullFieldName);
   scopeAdd(query, bytesDestroy);
   
   DbResult *queryResult
@@ -2556,5 +2589,190 @@ bool sqliteEnsureFieldIndexed(void *database,
   SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
     database, dbName, tableName, fieldName, boolNames[querySuccessful]);
   return querySuccessful;
+}
+
+/// @fn bool sqliteAddRecords(void *database, const char *dbName, const char *tableName, const DbResult *dbResut)
+///
+/// @brief Add a group of records to a table in a database.
+///
+/// @param database A pointer to the SqlDatabase object representing the
+///   database system to query cast to a void*.
+/// @param dbName The name of the database the table is in.
+/// @param tableName The name of the table to add a record to.
+/// @param dbResult A DbResult that contains the records to add.
+///
+/// @return Returns true on success, false on failure.
+bool sqliteAddRecords(void *database,
+  const char *dbName, const char *tableName, const DbResult *dbResult
+) {
+  printLog(TRACE,
+    "ENTER sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\")\n",
+    database, dbName, tableName);
+  
+  if ((database == NULL) || (dbName == NULL) || (tableName == NULL)) {
+    printLog(ERR, "One or more NULL parameters.\n");
+    printLog(TRACE,
+      "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+      "= {NOT successful}\n", database, dbName, tableName);
+    return false;
+  } else if ((dbResult == NULL) || (dbResult->numResults == 0)) {
+    // Not an error, but nothing to do.
+    printLog(TRACE,
+      "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+      "= {successful}\n", database, dbName, tableName);
+    return true;
+  }
+  
+  SqlDatabase *sqlDatabase = (SqlDatabase*) database;
+  bool returnValue = false;
+  DbResult *queryResult = NULL;
+  
+  Bytes query = NULL;
+  
+  int typeLongDoubleIndex = getIndexFromTypeDescriptor(typeLongDouble);
+  int typeStringCiNoCopyIndex = getIndexFromTypeDescriptor(typeStringCiNoCopy);
+  int typeBytesNoCopyIndex = getIndexFromTypeDescriptor(typeBytesNoCopy);
+  
+  returnValue = false;
+  
+  bytesAddStr(&query, "insert or ignore into ");
+  bytesAddStr(&query, dbName);
+  bytesAddStr(&query, dbInstance);
+  bytesAddStr(&query, ".");
+  bytesAddStr(&query, tableName);
+  bytesAddStr(&query, " values ");
+  
+  u64 numResults = dbResult->numResults;
+  u64 numFields = dbResult->numFields;
+  TypeDescriptor **fieldTypes = dbResult->fieldTypes;
+  for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
+    bytesAddStr(&query, "(");
+    for (u64 fieldIndex = 0; fieldIndex < numFields; fieldIndex++) {
+      void *fieldValue
+        = dbGetResultByIndex(dbResult, recordIndex, fieldIndex, NULL);
+      TypeDescriptor *fieldType = fieldTypes[fieldIndex];
+      printLog(DEBUG, "Field (%s, %s, %llu) is of type \"%s\".\n",
+        dbName, tableName, llu(fieldIndex),
+        (fieldType != NULL) ? fieldType->name : "NULL");
+      int fieldTypeIndex = getIndexFromTypeDescriptor(fieldType);
+      if ((fieldTypeIndex < 0) || (fieldTypeIndex > typeBytesNoCopyIndex)) {
+        printLog(ERR, "Invalid field type.\n");
+        query = bytesDestroy(query);
+        returnValue = false;
+        printLog(TRACE,
+          "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+          "= {%s}\n", database, dbName, tableName,
+          (returnValue == true) ? "record added" : "record NOT added");
+        return returnValue;
+      }
+      
+      if (fieldValue != NULL) {
+        Bytes escapedValue = NULL;
+        if (fieldTypeIndex <= typeLongDoubleIndex) {
+          // Numeric value.  Convert to string and use the literal.
+          char *stringValue = fieldType->toString(fieldValue);
+          bytesAddStr(&escapedValue, stringValue);
+          stringValue = stringDestroy(stringValue);
+        } else if (fieldTypeIndex <= typeStringCiNoCopyIndex) {
+          escapedValue = sqlDatabase->makeStringLiteral(str(fieldValue));
+        } else { // fieldTypeIndex <= typeBytesNoCopyIndex
+          escapedValue = sqlDatabase->makeBytesLiteral((Bytes) fieldValue);
+        }
+        bytesAddBytes(&query, escapedValue);
+        escapedValue = bytesDestroy(escapedValue);
+      } else {
+        bytesAddStr(&query, "NULL");
+      }
+      
+      if (fieldIndex < numFields - 1) {
+        bytesAddStr(&query, ", ");
+      }
+    }
+    bytesAddStr(&query, ")");
+    
+    if (recordIndex < numResults - 1) {
+      bytesAddStr(&query, ", ");
+    }
+  }
+  bytesAddStr(&query, ";");
+  
+  printLog(DEBUG, "Running query \"%s\"\n", str(query));
+  queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
+  query = bytesDestroy(query);
+  returnValue = queryResult->successful;
+  queryResult = dbFreeResult(queryResult);
+  
+  if (returnValue == false) {
+    // Bulk update failed.  Add what we can one-by-one.
+    // NOTE:  This does not change the overall return value since we still
+    // failed to add all the records, it just does a better job than giving
+    // up completely.  Only the caller knows whether a partial success is
+    // acceptable or not.
+    for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
+      bytesAddStr(&query, "insert or ignore into ");
+      bytesAddStr(&query, dbName);
+      bytesAddStr(&query, dbInstance);
+      bytesAddStr(&query, ".");
+      bytesAddStr(&query, tableName);
+      bytesAddStr(&query, " values ");
+      bytesAddStr(&query, "(");
+      
+      for (u64 fieldIndex = 0; fieldIndex < numFields; fieldIndex++) {
+        void *fieldValue
+          = dbGetResultByIndex(dbResult, recordIndex, fieldIndex, NULL);
+        TypeDescriptor *fieldType = fieldTypes[fieldIndex];
+        printLog(DEBUG, "Field (%s, %s, %llu) is of type \"%s\".\n",
+          dbName, tableName, llu(fieldIndex),
+          (fieldType != NULL) ? fieldType->name : "NULL");
+        int fieldTypeIndex = getIndexFromTypeDescriptor(fieldType);
+        if ((fieldTypeIndex < 0) || (fieldTypeIndex > typeBytesNoCopyIndex)) {
+          printLog(ERR, "Invalid field type.\n");
+          query = bytesDestroy(query);
+          returnValue = false;
+          printLog(TRACE,
+            "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+            "= {%s}\n", database, dbName, tableName,
+            (returnValue == true) ? "record added" : "record NOT added");
+          return returnValue;
+        }
+        
+        if (fieldValue != NULL) {
+          Bytes escapedValue = NULL;
+          if (fieldTypeIndex <= typeLongDoubleIndex) {
+            // Numeric value.  Convert to string and use the literal.
+            char *stringValue = fieldType->toString(fieldValue);
+            bytesAddStr(&escapedValue, stringValue);
+            stringValue = stringDestroy(stringValue);
+          } else if (fieldTypeIndex <= typeStringCiNoCopyIndex) {
+            escapedValue = sqlDatabase->makeStringLiteral(str(fieldValue));
+          } else { // fieldTypeIndex <= typeBytesNoCopyIndex
+            escapedValue = sqlDatabase->makeBytesLiteral((Bytes) fieldValue);
+          }
+          bytesAddBytes(&query, escapedValue);
+          escapedValue = bytesDestroy(escapedValue);
+        } else {
+          bytesAddStr(&query, "NULL");
+        }
+        
+        if (fieldIndex < numFields - 1) {
+          bytesAddStr(&query, ", ");
+        }
+      }
+      bytesAddStr(&query, ");");
+      
+      printLog(DEBUG, "Running query \"%s\"\n", str(query));
+      queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
+      query = bytesDestroy(query);
+      // We don't care about the success of the operation.  Our return value is
+      // going to be false regardless of what was returned here.
+      queryResult = dbFreeResult(queryResult);
+    }
+  }
+  
+  printLog(TRACE,
+    "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
+    "= {%s}\n", database, dbName, tableName,
+    (returnValue == true) ? "successful" : "NOT successful");
+  return returnValue;
 }
 
