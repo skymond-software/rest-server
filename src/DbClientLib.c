@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   (c) Copyright 2012-2024 Skymond, LLC.                    //
+//                   Copyright (c) 2012-2024 Skymond, LLC.                    //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -1167,7 +1167,7 @@ void* dbGetResultByName(const DbResult *dbResult,
 ///
 /// @return Returns the index of the result on success, -1 on failure.
 i64 dbGetResultIndexByLookupDict(const DbResult *dbResult, Dictionary *lookupDict) {
-  scopeBegin();
+  scopeBegin(MAX_SCOPE_VARS);
   printLog(TRACE,
     "ENTER dbGetResultIndexByLookupDict(dbName=\"%s\", tableName=\"%s\", "
     "lookupDict=%p)\n",

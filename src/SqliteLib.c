@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   (c) Copyright 2012-2024 Skymond, LLC.                    //
+//                   Copyright (c) 2012-2024 Skymond, LLC.                    //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -1894,7 +1894,7 @@ bool sqliteAddField(SqlDatabase *database, const char *dbString,
     return false;
   }
   
-  scopeBegin();
+  scopeBegin(MAX_SCOPE_VARS);
   // SQLite doesn't support adding new column names, so we need to add a new
   // table, add all the records, and then delete the old table and rename the
   // new table to the old name.
