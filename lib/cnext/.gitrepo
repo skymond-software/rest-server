@@ -6,7 +6,7 @@
 [subrepo]
 	remote = git@github.com:james-card/cnext.git
 	branch = main
-	commit = e998b7a30167115583e4abde2db56a584f1e54ad
-	parent = 2c6d51fea68c25f965f2dbcade98e18303e7a5e9
+	commit = b7dc25fa935928bb21e9b6fff1162301150033cc
+	parent = fc0a35533de8690641b349e02d39c0e8928899e7
 	method = merge
 	cmdver = 0.4.9
