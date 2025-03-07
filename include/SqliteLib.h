@@ -12,7 +12,7 @@
 /// @details
 ///
 /// @copyright
-///                    Copyright (c) 2012-2024 Skymond, LLC.
+///                    Copyright (c) 2012-2025 Skymond, LLC.
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
