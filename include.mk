@@ -6,6 +6,7 @@ REMOVE      := rm -rf
 ARCHIVE     := ar rcs
 
 CNEXT_OBJ_FILES := \
+    $(CNEXT_OBJ_DIR)/CThreadsMessages.o \
     $(CNEXT_OBJ_DIR)/Coroutines.o \
     $(CNEXT_OBJ_DIR)/DataTypes.o \
     $(CNEXT_OBJ_DIR)/Dictionary.o \
@@ -13,6 +14,8 @@ CNEXT_OBJ_FILES := \
     $(CNEXT_OBJ_DIR)/Glibc27CompatLib.o \
     $(CNEXT_OBJ_DIR)/HashTable.o \
     $(CNEXT_OBJ_DIR)/List.o \
+    $(CNEXT_OBJ_DIR)/Messages.o \
+    $(CNEXT_OBJ_DIR)/LinuxProcessSync.o \
     $(CNEXT_OBJ_DIR)/LoggingLib.o \
     $(CNEXT_OBJ_DIR)/PosixCThreads.o \
     $(CNEXT_OBJ_DIR)/PosixProcesses.o \
@@ -27,6 +30,7 @@ CNEXT_OBJ_FILES := \
     $(CNEXT_OBJ_DIR)/Stack.o \
     $(CNEXT_OBJ_DIR)/StringLib.o \
     $(CNEXT_OBJ_DIR)/TimeUtils.o \
+    $(CNEXT_OBJ_DIR)/Trie.o \
     $(CNEXT_OBJ_DIR)/Vector.o \
     $(CNEXT_OBJ_DIR)/WinCThreads.o \
     $(CNEXT_OBJ_DIR)/WinProcesses.o \
