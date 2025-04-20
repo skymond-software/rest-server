@@ -32,8 +32,8 @@
 #include "SqlClientLib.h"
 #include <stdio.h>
 
-DbResult* sqliteGetDatabaseNames(SqlDatabase *database);
-DbResult* sqliteGetTableNames(SqlDatabase *database, const char *dbString);
+DbResult* sqliteGetDatabaseNames(void *db);
+DbResult* sqliteGetTableNames(void *db, const char *dbString);
 
 #define leaf(path) ((strrchr(path, '/')) ? (strrchr(path, '/') + 1) : path)
 int main(int argc, char **argv) {

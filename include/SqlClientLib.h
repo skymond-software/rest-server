@@ -87,10 +87,10 @@ typedef struct SqlDatabase {
   HashTable* tableDescriptions;
 } SqlDatabase;
 
-DbResult* sqlGetValuesVargs(SqlDatabase *database,
+DbResult* sqlGetValuesVargs(void *db,
   const char *dbString, const char *tableName,
   const char *select, const char *orderBy, va_list args);
-DbResult* sqlGetValues_(SqlDatabase *database,
+DbResult* sqlGetValues_(void *db,
   const char *dbName, const char *tableName,
   const char *select, const char *orderBy, ...);
 /// @def sqlGetValues
@@ -112,51 +112,51 @@ DbResult* sqlGetValues_(SqlDatabase *database,
 /// This macro utilizes the orderBy parameter.
 #define sqlGetRecordsOrderBy(database, dbName, tableName, orderBy, ...) \
   sqlGetValues_(database, dbName, tableName, "*", orderBy, ##__VA_ARGS__, NULL)
-DbResult* sqlGetValuesDict(SqlDatabase *database,
+DbResult* sqlGetValuesDict(void *db,
   const char *dbString, const char *tableName,
   const char *select, const char *orderBy, Dictionary *args);
-bool sqlAddRecordVargs(SqlDatabase *database,
+bool sqlAddRecordVargs(void *db,
   const char *dbString, const char *tableName, va_list args);
-bool sqlAddTableVargs(SqlDatabase *database,
+bool sqlAddTableVargs(void *db,
   const char *dbName, const char *tableName, const char *primaryKey,
   va_list args);
-bool sqlDeleteRecordsVargs(SqlDatabase *database,
+bool sqlDeleteRecordsVargs(void *db,
   const char *dbString, const char *tableName, va_list args);
-bool sqlUpdateRecordDict(SqlDatabase *database,
+bool sqlUpdateRecordDict(void *db,
   const char *dbString, const char *tableName, Dictionary *dict);
-bool sqlAddRecordDict(SqlDatabase *database,
+bool sqlAddRecordDict(void *db,
   const char *dbString, const char *tableName,
   Dictionary *dict);
-DbResult* sqlGetValuesLikeVargs(SqlDatabase *database,
+DbResult* sqlGetValuesLikeVargs(void *db,
   const char *dbName, const char *tableName,
   const char *select, const char *orderBy, va_list args);
-bool sqlAddTableList(SqlDatabase *database,
+bool sqlAddTableList(void *db,
   const char *dbName, const char *tableName, const char *primaryKey,
   List *args);
-bool sqlDeleteTable(SqlDatabase *database,
+bool sqlDeleteTable(void *db,
   const char *dbString, const char *tableName);
-bool sqlDeleteRecordsLikeVargs(SqlDatabase *database,
+bool sqlDeleteRecordsLikeVargs(void *db,
   const char *dbString, const char *tableName, va_list args);
 bool sqlUpdateResultVargs(const DbResult *dbResult, u64 resultIndex, va_list args);
-DbResult* sqlQuery(SqlDatabase *database, const char *query);
-bool sqlLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock);
-bool sqlUnlockTables(SqlDatabase *database, const Dictionary *tableLock);
-bool sqlStartTransaction(SqlDatabase *database);
-bool sqlCommitTransaction(SqlDatabase *database);
-bool sqlRollbackTransaction(SqlDatabase *database);
-bool sqlDeleteField(SqlDatabase *database, const char *dbString,
+DbResult* sqlQuery(void *db, const char *query);
+bool sqlLockTablesDict(void *db, const Dictionary *tablesToLock);
+bool sqlUnlockTables(void *db, const Dictionary *tableLock);
+bool sqlStartTransaction(void *db);
+bool sqlCommitTransaction(void *db);
+bool sqlRollbackTransaction(void *db);
+bool sqlDeleteField(void *db, const char *dbString,
   const char *tableName, const char *fieldName
 );
-bool sqlAddField(SqlDatabase *database, const char *dbString,
+bool sqlAddField(void *db, const char *dbString,
   const char *tableName, const char *afterField, const char *newField,
   void *type);
-bool sqlChangeFieldName(SqlDatabase *database, const char *dbString,
+bool sqlChangeFieldName(void *db, const char *dbString,
   const char *tableName, const char *oldName, const char *newName);
-DbResult* sqlDescribeTable(SqlDatabase *sqlDatabase, const char *dbName,
+DbResult* sqlDescribeTable(void *db, const char *dbName,
   const char *tableName);
 bool sqlAddRecords(void *database,
   const char *dbName, const char *tableName, const DbResult *dbResult);
-bool sqlRenameTable(SqlDatabase *database, const char *dbName,
+bool sqlRenameTable(void *db, const char *dbName,
   const char *oldTableName, const char *newTableName);
 TypeDescriptor* sqlTypeNameToTypeDescriptor(const char *typeInfo);
 int sqlCompare(void *db1, void *db2);

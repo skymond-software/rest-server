@@ -413,7 +413,7 @@ u64 sqlGetNumFields(void *db, const char *dbName, const char *tableName) {
   return returnValue;
 }
 
-/// @fn DbResult* sqlGetValues_(SqlDatabase *database, const char *dbName, const char *tableName, const char *select, const char *orderBy, ...)
+/// @fn DbResult* sqlGetValues_(void *db, const char *dbName, const char *tableName, const char *select, const char *orderBy, ...)
 ///
 /// @brief Get one or more values from the database.
 ///
@@ -422,8 +422,8 @@ u64 sqlGetNumFields(void *db, const char *dbName, const char *tableName) {
 ///   argument to make the code cleaner and be more intuitive to future code
 ///   authors.
 ///
-/// @param database A pointer to the SqlDatabase object representing the
-///   database system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 /// @param dbName The name of the database to query.
 /// @param tableName The name of the table to query.
 /// @param select The name of the field to interrotgae.
@@ -436,10 +436,12 @@ u64 sqlGetNumFields(void *db, const char *dbName, const char *tableName) {
 ///   sqlGetValues macro that wraps this function.
 ///
 /// @return A DbResult object with the results of the query.
-DbResult* sqlGetValues_(SqlDatabase *database,
+DbResult* sqlGetValues_(void *db,
   const char *dbName, const char *tableName,
   const char *select, const char *orderBy, ...
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlGetValues_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", orderBy=\"%s\")\n",
@@ -463,15 +465,15 @@ DbResult* sqlGetValues_(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn DbResult* sqlGetValuesVargs(SqlDatabase *database, const char *dbString, const char *tableName, const char *select, const char *orderBy, va_list args)
+/// @fn DbResult* sqlGetValuesVargs(void *db, const char *dbString, const char *tableName, const char *select, const char *orderBy, va_list args)
 ///
 /// @brief Low-level method for retrieving values from a table in a database.
 ///
 /// @details This is a support function intented to only be called from other
 ///   parts of this library.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to qurey.
 /// @param tableName The name of the table to query.
 /// @param select The name of the field to examine.
@@ -480,10 +482,12 @@ DbResult* sqlGetValues_(SqlDatabase *database,
 /// @param args The representation of the query.
 ///
 /// @return A DbResult with the results of the query.
-DbResult* sqlGetValuesVargs(SqlDatabase *database,
+DbResult* sqlGetValuesVargs(void *db,
   const char *dbString, const char *tableName,
   const char *select, const char *orderBy, va_list args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -618,15 +622,15 @@ DbResult* sqlGetValuesVargs(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn DbResult* sqlGetValuesDict(SqlDatabase *database, const char *dbString, const char *tableName, const char *select, const char *orderBy, Dictionary *args)
+/// @fn DbResult* sqlGetValuesDict(void *db, const char *dbString, const char *tableName, const char *select, const char *orderBy, Dictionary *args)
 ///
 /// @brief Low-level method for retrieving values from a table in a database.
 ///
 /// @details This is a support function intented to only be called from other
 ///   parts of this library.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to qurey.
 /// @param tableName The name of the table to query.
 /// @param select The name of the field to examine.
@@ -635,10 +639,12 @@ DbResult* sqlGetValuesVargs(SqlDatabase *database,
 /// @param args The representation of the query.
 ///
 /// @return A DbResult with the results of the query.
-DbResult* sqlGetValuesDict(SqlDatabase *database,
+DbResult* sqlGetValuesDict(void *db,
   const char *dbString, const char *tableName,
   const char *select, const char *orderBy, Dictionary *args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -729,12 +735,12 @@ DbResult* sqlGetValuesDict(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn bool sqlAddRecordVargs(SqlDatabase *database, const char *dbString, const char *tableName, va_list args)
+/// @fn bool sqlAddRecordVargs(void *db, const char *dbString, const char *tableName, va_list args)
 ///
 /// @brief Add a new record to a table in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database the table is in.
 /// @param tableName The name of the table to add a record to.
 /// @param args A va_list of C strings.  The values are position dependent and
@@ -742,9 +748,11 @@ DbResult* sqlGetValuesDict(SqlDatabase *database,
 ///   parameters are terminated by a NULL pointer.
 ///
 /// @return True on success, false on failure.
-bool sqlAddRecordVargs(SqlDatabase *database,
+bool sqlAddRecordVargs(void *db,
   const char *dbString, const char *tableName, va_list args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -823,12 +831,12 @@ bool sqlAddRecordVargs(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn bool sqlAddTableVargs(SqlDatabase *database, const char *dbString, const char *tableName, const char *primaryKey, va_list args)
+/// @fn bool sqlAddTableVargs(void *db, const char *dbString, const char *tableName, const char *primaryKey, va_list args)
 ///
 /// @brief Add a new table to a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to add a table to.
 /// @param tableName The name of the table to add.
 /// @param primaryKey The name of the primary key, or a comma-separated string
@@ -838,9 +846,11 @@ bool sqlAddRecordVargs(SqlDatabase *database,
 ///   are terminated by a NULL pointer.
 ///
 /// @return True on success, false on failure.
-bool sqlAddTableVargs(SqlDatabase *database, const char *dbString,
+bool sqlAddTableVargs(void *db, const char *dbString,
   const char *tableName, const char *primaryKey, va_list args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -912,12 +922,12 @@ bool sqlAddTableVargs(SqlDatabase *database, const char *dbString,
   return returnValue;
 }
 
-/// @fn bool sqlDeleteRecordsVargs(SqlDatabase *database, const char *dbString, const char *tableName, va_list args)
+/// @fn bool sqlDeleteRecordsVargs(void *db, const char *dbString, const char *tableName, va_list args)
 ///
 /// @brief Delete a record from a table in the database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database in which to delete a record.
 /// @param tableName The name of the table in which to delete a record.
 /// @param args A va_list of C string pairs.  The first of the two strings is
@@ -925,9 +935,11 @@ bool sqlAddTableVargs(SqlDatabase *database, const char *dbString,
 ///   for that field in the query.  The qurey is terminated by a NULL pointer.
 ///
 /// @return True on success or false on failure.
-bool sqlDeleteRecordsVargs(SqlDatabase *database, const char *dbString,
+bool sqlDeleteRecordsVargs(void *db, const char *dbString,
   const char *tableName, va_list args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -1011,11 +1023,13 @@ bool sqlDeleteRecordsVargs(SqlDatabase *database, const char *dbString,
   return returnValue;
 }
 
-/// @fn Bytes dictionaryToQuery(SqlDatabase *database, const char *dbString, const char *tableName, const Dictionary *dict, const char *operation)
+/// @fn Bytes dictionaryToQuery(void *db, const char *dbString, const char *tableName, const Dictionary *dict, const char *operation)
 ///
 /// @brief Convert a dictionary (and it's other metadata) to a query that can
 /// be run against the SQL instance.
 ///
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database in which to update a record.
 /// @param tableName The name of the table in which to update a record.
 /// @param dict A Dictionary containing key/value pairs where the keys are the
@@ -1024,9 +1038,11 @@ bool sqlDeleteRecordsVargs(SqlDatabase *database, const char *dbString,
 /// 
 /// @return Returns a pointer to a new Bytes object representing the
 /// appropriate query on success, NULL on failure.
-Bytes dictionaryToQuery(SqlDatabase *database, const char *dbString,
+Bytes dictionaryToQuery(void *db, const char *dbString,
   const char *tableName, const Dictionary *dict, const char *operation
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER dictionaryToQuery(dbString=\"%s\", tableName=\"%s\", "
     "dict=%p, operation=\"%s\")\n",
@@ -1159,25 +1175,27 @@ Bytes dictionaryToQuery(SqlDatabase *database, const char *dbString,
   return query;
 }
 
-/// @fn bool sqlUpdateRecordDict(SqlDatabase *database, const char *dbString, const char *tableName, Dictionary *dict)
+/// @fn bool sqlUpdateRecordDict(void *db, const char *dbString, const char *tableName, Dictionary *dict)
 ///
 /// @brief Update the contents of a record in the database.
 ///
 /// @details This function replaces an existing record in the database with
 ///   a new one specified by the extra parameters in this function.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database in which to update a record.
 /// @param tableName The name of the table in which to update a record.
 /// @param dict A Dictionary containing key/value pairs where the keys are the
 ///   names of the columns and the values are the new values to store.
 ///
 /// @return True on success, false on failure.
-bool sqlUpdateRecordDict(SqlDatabase *database,
+bool sqlUpdateRecordDict(void *db,
   const char *dbString, const char *tableName,
   Dictionary *dict
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlUpdateRecordDict(database=%p, dbString=\"%s\", tableName=\"%s\", "
     "dict=%p)\n", database, dbString, tableName, dict);
@@ -1206,22 +1224,24 @@ bool sqlUpdateRecordDict(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn bool sqlAddRecordDict(SqlDatabase *database, const char *dbString, const char *tableName, Dictionary *dict)
+/// @fn bool sqlAddRecordDict(void *db, const char *dbString, const char *tableName, Dictionary *dict)
 ///
 /// @brief Add a new record to a table in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database the table is in.
 /// @param tableName The name of the table to add a record to.
 /// @param dict A Dictionary containing key/value pairs where the keys are the
 ///   names of the columns and the values are the new values to store.
 ///
 /// @return True on success, false on failure.
-bool sqlAddRecordDict(SqlDatabase *database,
+bool sqlAddRecordDict(void *db,
   const char *dbString, const char *tableName,
   Dictionary *dict
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlAddRecordDict(database=%p, dbString=\"%s\", tableName=\"%s\", "
     "dict=%p)\n", database, dbString, tableName, dict);
@@ -1250,7 +1270,7 @@ bool sqlAddRecordDict(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn DbResult* sqlGetValuesLikeVargs(SqlDatabase *database, const char *dbString, const char *tableName, const char *select, const char *orderBy, va_list args)
+/// @fn DbResult* sqlGetValuesLikeVargs(void *db, const char *dbString, const char *tableName, const char *select, const char *orderBy, va_list args)
 ///
 /// @brief Low-level method for retrieving values from a table in a database
 /// similar to the criteria.
@@ -1258,8 +1278,8 @@ bool sqlAddRecordDict(SqlDatabase *database,
 /// @details This is a support function intented to only be called from other
 ///   parts of this library.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to qurey.
 /// @param tableName The name of the table to query.
 /// @param select The name of the field to examine.
@@ -1268,10 +1288,12 @@ bool sqlAddRecordDict(SqlDatabase *database,
 /// @param args The representation of the query.
 ///
 /// @return A DbResult with the results of the query.
-DbResult* sqlGetValuesLikeVargs(SqlDatabase *database,
+DbResult* sqlGetValuesLikeVargs(void *db,
   const char *dbString, const char *tableName,
   const char *select, const char *orderBy, va_list args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -1362,14 +1384,14 @@ DbResult* sqlGetValuesLikeVargs(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn bool sqlAddTableList(SqlDatabase *database, const char *dbString, const char *tableName, const char *primaryKey, List *args)
+/// @fn bool sqlAddTableList(void *db, const char *dbString, const char *tableName, const char *primaryKey, List *args)
 ///
 /// @brief Add a new table to a database using a data structure.  Order of
 /// arguments matters here, so we use a data structure that maintains order
 /// (i.e. a list) instead of a dictionary, which could have arbitrary order.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to add a table to.
 /// @param tableName The name of the table to add.
 /// @param primaryKey The name of the primary key, or a comma-separated string
@@ -1380,10 +1402,12 @@ DbResult* sqlGetValuesLikeVargs(SqlDatabase *database,
 ///   value.
 ///
 /// @return true on success or false on failure.
-bool sqlAddTableList(SqlDatabase *database,
+bool sqlAddTableList(void *db,
   const char *dbString, const char *tableName, const char *primaryKey,
   List *args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -1446,19 +1470,21 @@ bool sqlAddTableList(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn bool sqlDeleteTable(SqlDatabase *database, const char *dbString, const char *tableName)
+/// @fn bool sqlDeleteTable(void *db, const char *dbString, const char *tableName)
 ///
 /// @brief Get the names of the tables in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to use.
 /// @param tableName The name of the table to delete (drop).
 ///
 /// @return Returns true if the operation succeeded, false otherwise.
-bool sqlDeleteTable(SqlDatabase *database,
+bool sqlDeleteTable(void *db,
   const char *dbString, const char *tableName
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -1488,7 +1514,7 @@ bool sqlDeleteTable(SqlDatabase *database,
   return returnValue;
 }
 
-/// @fn bool sqlDeleteRecordsLikeVargs(SqlDatabase *database, const char *dbString, const char *tableName, va_list args)
+/// @fn bool sqlDeleteRecordsLikeVargs(void *db, const char *dbString, const char *tableName, va_list args)
 ///
 /// @brief Low-level method for retrieving values from a table in a database
 /// similar to the criteria.
@@ -1496,17 +1522,19 @@ bool sqlDeleteTable(SqlDatabase *database,
 /// @details This is a support function intented to only be called from other
 ///   parts of this library.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to qurey.
 /// @param tableName The name of the table to query.
 /// @param args A va_list of key/value paris with the first of the two being
 /// the key (name of the column) and the second of the two being the value.
 ///
 /// @return A DbResult with the results of the query.
-bool sqlDeleteRecordsLikeVargs(SqlDatabase *database,
+bool sqlDeleteRecordsLikeVargs(void *db,
   const char *dbString, const char *tableName, va_list args
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -1759,16 +1787,18 @@ bool sqlUpdateResultVargs(const DbResult *dbResult, u64 resultIndex,
   return returnValue;
 }
 
-/// @fn DbResult* sqlQuery(SqlDatabase *database, const char *query)
+/// @fn DbResult* sqlQuery(void *db, const char *query)
 ///
 /// @brief Method for running a raw SQL query against the database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param query The SQL query to run.
 ///
 /// @return A DbResult with the results of the query.
-DbResult* sqlQuery(SqlDatabase *database, const char *query) {
+DbResult* sqlQuery(void *db, const char *query) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlQuery(database=%p, query=\"%s\")\n",
     database, query);
@@ -1785,18 +1815,20 @@ DbResult* sqlQuery(SqlDatabase *database, const char *query) {
   return queryResult;
 }
 
-/// @fn bool sqlLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock)
+/// @fn bool sqlLockTablesDict(void *db, const Dictionary *tablesToLock)
 ///
 /// @brief Get a write lock in the database on the specified tables.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param tablesToLock A Dictionary (HashTable) where the keys are the names of
 ///   the tables to lock.  Values are ignored.  This function does *NOT* take
 ///   ownership of this data structure.  The caller must destroy it.
 ///
 /// @return Returns true if the tables were locked successfully, false if not.
-bool sqlLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock) {
+bool sqlLockTablesDict(void *db, const Dictionary *tablesToLock) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlLockTablesDict(database=%p, tablesToLock=%p)\n",
     database, tablesToLock);
@@ -1856,18 +1888,20 @@ bool sqlLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock) {
   return querySuccessful;
 }
 
-/// @fn bool sqlUnlockTables(SqlDatabase *database, const Dictionary *tableLock)
+/// @fn bool sqlUnlockTables(void *db, const Dictionary *tableLock)
 ///
 /// @brief Unlock previously-locked tables and clear the cache of locked tables
 /// for this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param tableLock A pointer to a Dictionary returned by a previous call to
 ///   one of the sqlLockTables functions.
 ///
 /// @return This function always returns NULL.
-bool sqlUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
+bool sqlUnlockTables(void *db, const Dictionary *tableLock) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlUnlockTables(database=%p, tableLock=%p)\n",
     database, tableLock);
@@ -1890,7 +1924,7 @@ bool sqlUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
   return querySuccessful;
 }
 
-/// @fn bool sqlCommitTransaction(SqlDatabase *database)
+/// @fn bool sqlCommitTransaction(void *db)
 ///
 /// @brief Commit an in-progress transaction for this thread in the database.
 ///
@@ -1898,12 +1932,14 @@ bool sqlUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
 /// connections are managed by thread on our side, so this commit will
 /// only apply to transactions in progress on this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns true if committing the transaction was successful, false
 /// if not.
-bool sqlCommitTransaction(SqlDatabase *database) {
+bool sqlCommitTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER sqlCommitTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -1923,7 +1959,7 @@ bool sqlCommitTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn bool sqlRollbackTransaction(SqlDatabase *database)
+/// @fn bool sqlRollbackTransaction(void *db)
 ///
 /// @brief Rollback an in-progress transaction for this thread in the database.
 ///
@@ -1931,12 +1967,14 @@ bool sqlCommitTransaction(SqlDatabase *database) {
 /// connections are managed by threads on our side, so this rollback will
 /// only apply to transactions in progress on this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns true if rolling back the transaction was successful, false
 /// if not.
-bool sqlRollbackTransaction(SqlDatabase *database) {
+bool sqlRollbackTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER sqlRollbackTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -1956,21 +1994,23 @@ bool sqlRollbackTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn bool sqlDeleteField(SqlDatabase *database, const char *dbString, const char *tableName, const char *fieldName)
+/// @fn bool sqlDeleteField(void *db, const char *dbString, const char *tableName, const char *fieldName)
 ///
 /// @brief Remove a column from a table in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database in the SqlDatabase to address.
 /// @param tableName The name of the table to remove a field from.
 /// @param fieldName The name of the field to remove from the table.
 ///
 /// @return Returns true if removing the field from the table was successful,
 /// false if not.
-bool sqlDeleteField(SqlDatabase *database, const char *dbString,
+bool sqlDeleteField(void *db, const char *dbString,
   const char *tableName, const char *fieldName
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlDeleteField(database=%p, dbString=\"%s\", tableName=\"%s\", "
     "fieldName=\"%s\")\n", database, dbString, tableName, fieldName);
@@ -2010,12 +2050,12 @@ bool sqlDeleteField(SqlDatabase *database, const char *dbString,
   return querySuccessful;
 }
 
-/// @fn bool sqlAddField(SqlDatabase *database, const char *dbString, const char *tableName, const char *afterField, const char *newField, void *type)
+/// @fn bool sqlAddField(void *db, const char *dbString, const char *tableName, const char *afterField, const char *newField, void *type)
 ///
 /// @brief Add a new field to an existing table in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database in the SqlDatabase to address.
 /// @param tableName The name of the table to add a field to.
 /// @param afterField The name of the field in the existing table to place the
@@ -2027,10 +2067,12 @@ bool sqlDeleteField(SqlDatabase *database, const char *dbString,
 ///
 /// @return Returns true if adding the field to the table was successful,
 /// false if not.
-bool sqlAddField(SqlDatabase *database, const char *dbString,
+bool sqlAddField(void *db, const char *dbString,
   const char *tableName, const char *afterField, const char *newField,
   void *type
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlAddField(database=%p, dbString=\"%s\", tableName=\"%s\", "
     "afterField=\"%s\", newField=\"%s\", type=%p)\n",
@@ -2093,12 +2135,12 @@ bool sqlAddField(SqlDatabase *database, const char *dbString,
   return querySuccessful;
 }
 
-/// @fn bool sqlChangeFieldName(SqlDatabase *database, const char *dbString, const char *tableName, const char *oldName, const char *newName)
+/// @fn bool sqlChangeFieldName(void *db, const char *dbString, const char *tableName, const char *oldName, const char *newName)
 ///
 /// @brief Add a new field to an existing table in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database in the SqlDatabase to address.
 /// @param tableName The name of the table to add a field to.
 /// @param oldName The name of the field to change.
@@ -2106,9 +2148,11 @@ bool sqlAddField(SqlDatabase *database, const char *dbString,
 ///
 /// @return Returns true if changing the name of the field was successful,
 /// false if not.
-bool sqlChangeFieldName(SqlDatabase *database, const char *dbString,
+bool sqlChangeFieldName(void *db, const char *dbString,
   const char *tableName, const char *oldName, const char *newName
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlChangeFieldName(database=%p, dbString=\"%s\", tableName=\"%s\", "
     "oldName=\"%s\", newName=\"%s\")\n",
@@ -2151,7 +2195,7 @@ bool sqlChangeFieldName(SqlDatabase *database, const char *dbString,
   return querySuccessful;
 }
 
-/// @fn DbResult* sqlDescribeTable(SqlDatabase *sqlDatabase, const char *dbName, const char *tableName)
+/// @fn DbResult* sqlDescribeTable(void *db, const char *dbName, const char *tableName)
 ///
 /// @brief Get a (field name, TypeDescriptor) description of a table.
 ///
@@ -2162,9 +2206,11 @@ bool sqlChangeFieldName(SqlDatabase *database, const char *dbString,
 ///
 /// @return Returns a populated DbResult with the information on success, an
 /// unpopulated DbResult on failure.
-DbResult* sqlDescribeTable(SqlDatabase *sqlDatabase, const char *dbName,
+DbResult* sqlDescribeTable(void *db, const char *dbName,
   const char *tableName
 ) {
+  SqlDatabase *sqlDatabase = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqlDescribeTable(sqlDatabase=%p, dbName=\"%s\", "
     "tableName=\"%s\")\n", sqlDatabase, dbName, tableName);
@@ -2385,20 +2431,23 @@ bool sqlAddRecords(void *database,
   return returnValue;
 }
 
-/// @fn bool sqlRenameTable(SqlDatabase *database, const char *dbName, const char *oldTableName, const char *newTableName)
+/// @fn bool sqlRenameTable(void *db, const char *dbName, const char *oldTableName, const char *newTableName)
 ///
 /// @brief Rename a table in a database.
 ///
-/// @param database A pointer to a SqlDatabase object that manages the system.
+/// @param db A pointer to a SqlDatabase object that manages the system, cast
+///   to a void*.
 /// @param dbName The name of the database in the SQL database.
 /// @param oldTableName The name of the table as it exists in the database at
 ///   the time this call is made.
 /// @param newTableName The deisred new name of the table.
 ///
 /// @return Returns true on success, false on failure.
-bool sqlRenameTable(SqlDatabase *database, const char *dbName,
+bool sqlRenameTable(void *db, const char *dbName,
   const char *oldTableName, const char *newTableName
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   bool returnValue = true;
   
   printLog(TRACE, "ENTER sqlRenameTable(database=%p, dbName=\"%s\", "

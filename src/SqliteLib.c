@@ -45,30 +45,29 @@
 bool sqlInvalidateTableDescription(void *db,
   const char *dbName, const char *tableName);
 
-DbResult* sqliteExecQueryString(Sqlite *database, const char *queryString);
-DbResult* sqliteExecQueryBytes(Sqlite *database, const Bytes queryBytes);
-DbResult* sqliteGetDatabaseNames(SqlDatabase *database);
-DbResult* sqliteGetTableNames(SqlDatabase *database, const char *dbString);
-bool sqliteAddDatabase(SqlDatabase *database, const char *dbString);
-bool sqliteDeleteDatabase(SqlDatabase *database, const char *dbString);
+DbResult* sqliteExecQueryString(void *connection, const char *queryString);
+DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes);
+DbResult* sqliteGetDatabaseNames(void *db);
+DbResult* sqliteGetTableNames(void *db, const char *dbString);
+bool sqliteAddDatabase(void *db, const char *dbString);
+bool sqliteDeleteDatabase(void *db, const char *dbString);
 Bytes sqliteMakeStringLiteral(const char *input);
 Bytes sqliteMakeBytesLiteral(const Bytes input);
-bool sqliteStartTransaction(SqlDatabase *database);
-bool sqliteCommitTransaction(SqlDatabase *database);
-bool sqliteRollbackTransaction(SqlDatabase *database);
-SqlDatabase* sqliteDisconnect(SqlDatabase *sqlDatabase);
-DbResult* sqliteDescribeTable(Sqlite *database, const char *dbString,
+bool sqliteStartTransaction(void *db);
+bool sqliteCommitTransaction(void *db);
+bool sqliteRollbackTransaction(void *db);
+void* sqliteDisconnect(void *db);
+DbResult* sqliteDescribeTable(void *connection, const char *dbString,
   const char *tableName);
 bool sqliteChangeFieldType(void *db, const char *dbString,
   const char *tableName, const char *fieldName, const void *type);
-bool sqliteLockTablesDict(SqlDatabase *database,
-  const Dictionary *tablesToLock);
-bool sqliteUnlockTables(SqlDatabase *database, const Dictionary *tableLock);
-bool sqliteAddField(SqlDatabase *database, const char *dbString,
+bool sqliteLockTablesDict(void *db, const Dictionary *tablesToLock);
+bool sqliteUnlockTables(void *db, const Dictionary *tableLock);
+bool sqliteAddField(void *db, const char *dbString,
   const char *tableName, const char *afterField, const char *newField,
   void *type);
 int sqliteCompare(void *db1, void *db2);
-bool sqliteRenameTable(SqlDatabase *database, const char *dbName,
+bool sqliteRenameTable(void *db, const char *dbName,
   const char *oldTableName, const char *newTableName);
 i64 sqliteGetSize(void *db, const char *dbName);
 bool sqliteRenameDatabase(void *db,
@@ -305,16 +304,13 @@ Database* sqliteInit(const char *databasePath) {
     LOG_MALLOC_FAILURE();
     goto sqliteInitFailure;
   }
-  sqlDatabase->bytesQuery =
-    (DbResult* (*)(void *database, const Bytes query)) sqliteExecQueryBytes;
-  sqlDatabase->stringQuery = 
-    (DbResult* (*)(void *database, const char *query)) sqliteExecQueryString;
+  sqlDatabase->bytesQuery =sqliteExecQueryBytes;
+  sqlDatabase->stringQuery = sqliteExecQueryString;
   sqlDatabase->makeBytesLiteral = sqliteMakeBytesLiteral;
   sqlDatabase->makeStringLiteral = sqliteMakeStringLiteral;
   sqlDatabase->connection = sqlite;
   sqlDatabase->sqlDbType = SQLITE;
-  sqlDatabase->describeTable = (DbResult* (*)(void *database, const char *dbName,
-    const char *tableName)) sqliteDescribeTable;
+  sqlDatabase->describeTable = sqliteDescribeTable;
   sqlDatabase->compare = sqliteCompare;
   sqlDatabase->tableDescriptions = htCreate(typeBytes);
   
@@ -325,77 +321,35 @@ Database* sqliteInit(const char *databasePath) {
     LOG_MALLOC_FAILURE();
     goto databaseMallocFailure;
   }
-  database->getValuesVargs = (DbResult* (*)(void *database,
-    const char *dbString, const char *tableName,
-    const char *select, const char *orderBy, va_list args)) sqlGetValuesVargs;
-  database->getValuesDict = (DbResult* (*)(void *database,
-    const char *dbString, const char *tableName,
-    const char *select, const char *orderBy,
-    Dictionary *args)) sqlGetValuesDict;
-  database->addRecordVargs = (bool (*)(void *database,
-    const char *dbString, const char *tableName, va_list args))
-    sqlAddRecordVargs;
-  database->getDatabaseNames = (DbResult* (*)(void *database))
-    sqliteGetDatabaseNames;
-  database->addTableVargs = (bool (*)(void *database,
-    const char *dbName, const char *tableName, const char *primaryKey,
-    va_list args)) sqlAddTableVargs;
-  database->getTableNames = (DbResult* (*)(void *database, const char *dbName))
-    sqliteGetTableNames;
-  database->deleteRecordsVargs = (bool (*)(void *database,
-    const char *dbString, const char *tableName, va_list args))
-    sqlDeleteRecordsVargs;
-  database->updateRecordDict = (bool (*)(void *database,
-    const char *dbString, const char *tableName, Dictionary *dict))
-    sqlUpdateRecordDict;
-  database->addRecordDict = (bool (*)(void *database,
-    const char *dbString, const char *tableName,
-    Dictionary *dict)) sqlAddRecordDict;
-  database->getValuesLikeVargs = (DbResult* (*)(void *database,
-    const char *dbName, const char *tableName,
-    const char *select, const char *orderBy, va_list args))
-    sqlGetValuesLikeVargs;
-  database->addTableList = (bool (*)(void *database,
-    const char *dbName, const char *tableName, const char *primaryKey,
-    List *args)) sqlAddTableList;
-  database->deleteTable = (bool (*)(void *database,
-    const char *dbString, const char *tableName)) sqlDeleteTable;
-  database->deleteRecordsLikeVargs = (bool (*)(void *database,
-    const char *dbString, const char *tableName, va_list args))
-    sqlDeleteRecordsLikeVargs;
-  database->updateResultVargs
-    = (bool (*)(const DbResult *dbResult, u64 resultIndex, va_list args))
-    sqlUpdateResultVargs;
-  database->lockTablesDict = (bool (*)(void *database,
-    const Dictionary *tablesToLock)) sqliteLockTablesDict;
-  database->unlockTables
-    = (bool (*)(void *database, const Dictionary *tableLock)) sqliteUnlockTables;
-  database->startTransaction = (bool (*)(void *database)) sqliteStartTransaction;
-  database->commitTransaction = (bool (*)(void *database)) sqliteCommitTransaction;
-  database->rollbackTransaction
-    = (bool (*)(void *database)) sqliteRollbackTransaction;
-  database->addDatabase
-    = (bool (*)(void *database, const char* dbName)) sqliteAddDatabase;
-  database->deleteDatabase
-    = (bool (*)(void *database, const char* dbName)) sqliteDeleteDatabase;
-  database->deleteField
-    = (bool (*)(void *database, const char *dbString,
-    const char *tableName, const char *fieldName)) sqlDeleteField;
-  database->addField
-    = (bool (*)(void *database, const char *dbString,
-    const char *tableName, const char *afterField, const char *newField,
-    void *type)) sqliteAddField;
+  database->getValuesVargs = sqlGetValuesVargs;
+  database->getValuesDict = sqlGetValuesDict;
+  database->addRecordVargs = sqlAddRecordVargs;
+  database->getDatabaseNames = sqliteGetDatabaseNames;
+  database->addTableVargs = sqlAddTableVargs;
+  database->getTableNames = sqliteGetTableNames;
+  database->deleteRecordsVargs = sqlDeleteRecordsVargs;
+  database->updateRecordDict = sqlUpdateRecordDict;
+  database->addRecordDict = sqlAddRecordDict;
+  database->getValuesLikeVargs = sqlGetValuesLikeVargs;
+  database->addTableList = sqlAddTableList;
+  database->deleteTable = sqlDeleteTable;
+  database->deleteRecordsLikeVargs = sqlDeleteRecordsLikeVargs;
+  database->updateResultVargs = sqlUpdateResultVargs;
+  database->lockTablesDict = sqliteLockTablesDict;
+  database->unlockTables = sqliteUnlockTables;
+  database->startTransaction = sqliteStartTransaction;
+  database->commitTransaction = sqliteCommitTransaction;
+  database->rollbackTransaction = sqliteRollbackTransaction;
+  database->addDatabase = sqliteAddDatabase;
+  database->deleteDatabase = sqliteDeleteDatabase;
+  database->deleteField = sqlDeleteField;
+  database->addField = sqliteAddField;
   database->changeFieldType = sqliteChangeFieldType;
-  database->changeFieldName
-    = (bool (*)(void *database, const char *dbString,
-    const char *tableName, const char *oldName, const char *newName))
-    sqlChangeFieldName;
-  database->disconnect = (void* (*)(void*)) sqliteDisconnect;
-  database->describeTable = (DbResult* (*)(void *database, const char *dbName,
-    const char *tableName)) sqlDescribeTable;
+  database->changeFieldName = sqlChangeFieldName;
+  database->disconnect = sqliteDisconnect;
+  database->describeTable = sqlDescribeTable;
   database->addRecords = sqliteAddRecords;
-  database->renameTable = (bool (*)(void *database, const char *dbName,
-    const char *oldTableName, const char *newTableName)) sqliteRenameTable;
+  database->renameTable = sqliteRenameTable;
   database->compare = sqlCompare;
   database->getNumRecords = sqlGetNumRecords;
   database->getOrValuesDict = sqlGetOrValuesDict;
@@ -480,17 +434,18 @@ sqliteMallocFailure:
   return NULL;
 }
 
-/// @fn DbResult* sqliteExecQueryString(Sqlite *database, const char *queryString)
+/// @fn DbResult* sqliteExecQueryString(void *connection, const char *queryString)
 ///
 /// @brief Wrapper around sqlite3_exec that runs the provided query on the
 /// SQLite database instance and provides a DbResult.
 ///
-/// @param database A pointer to a Sqlite instance holding the metadata for the
-///   SQLite connection.
+/// @param connection A pointer to a Sqlite instance holding the metadata for
+///   the SQLite connection, cast to a void*.
 /// @param queryString A string containing the query to run.
 ///
 /// @return Returns a standard DbResult with the results of the query.
-DbResult* sqliteExecQueryString(Sqlite *database, const char *queryString) {
+DbResult* sqliteExecQueryString(void *connection, const char *queryString) {
+  Sqlite *database = (Sqlite*) connection;
   printLog(FLOOD,
     "ENTER sqliteExecQueryString(database=%p, queryString=\"%s\")",
     database, queryString);
@@ -524,17 +479,18 @@ TypeDescriptor **sqliteTypes[NUM_SQLITE_DATA_TYPES] = {
   &typeBytes,   // SQLITE_NULL
 };
 
-/// @fn DbResult* sqliteExecQueryBytes(Sqlite *database, const Bytes queryBytes)
+/// @fn DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes)
 ///
 /// @brief Wrapper around sqlite3_exec that runs the provided query on the
 /// SQLite database instance and provides a DbResult.
 ///
-/// @param database A pointer to a Sqlite instance holding the metadata for the
-///   SQLite connection.
+/// @param connection A pointer to a Sqlite instance holding the metadata for
+///   the SQLite connection, cast to a void*.
 /// @param queryBytes A string containing the query to run.
 ///
 /// @return Returns a standard DbResult with the results of the query.
-DbResult* sqliteExecQueryBytes(Sqlite *database, const Bytes queryBytes) {
+DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
+  Sqlite *database = (Sqlite*) connection;
   printLog(FLOOD,
     "ENTER sqliteExecQueryBytes(database=%p, queryBytes=\"%s\")",
     database, queryBytes);
@@ -772,21 +728,23 @@ fieldTypesMallocFailure:
   return queryResult;
 }
 
-/// @fn DbResult* sqliteGetDatabaseNames(SqlDatabase *database)
+/// @fn DbResult* sqliteGetDatabaseNames(void *db)
 ///
 /// @brief Get the names of the databases managed by the SQL system.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns a DbResult object with the names of the databases.
-DbResult* sqliteGetDatabaseNames(SqlDatabase *database) {
+DbResult* sqliteGetDatabaseNames(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqliteGetDatabaseNames(database=%p))\n",
     database);
   
   DbResult *queryResult
-    = sqliteExecQueryString((Sqlite*) database->connection,
+    = sqliteExecQueryString(database->connection,
       "pragma database_list;");
   if ((queryResult->successful == true) && (queryResult->numFields == 3)) {
     // Format of results:
@@ -819,16 +777,18 @@ DbResult* sqliteGetDatabaseNames(SqlDatabase *database) {
   return queryResult;
 }
 
-/// @fn DbResult* sqliteGetTableNames(SqlDatabase *database, const char *dbString)
+/// @fn DbResult* sqliteGetTableNames(void *db, const char *dbString)
 ///
 /// @brief Get the names of the tables in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to query.
 ///
 /// @return Returns a DbResult object with the names of the tables.
-DbResult* sqliteGetTableNames(SqlDatabase *database, const char *dbString) {
+DbResult* sqliteGetTableNames(void *db, const char *dbString) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -850,7 +810,7 @@ DbResult* sqliteGetTableNames(SqlDatabase *database, const char *dbString) {
     dbName = stringDestroy(dbName);
     return queryResult;
   }
-  queryResult = sqliteExecQueryString((Sqlite*) database->connection, query);
+  queryResult = sqliteExecQueryString(database->connection, query);
   query = stringDestroy(query);
   
   printLog(TRACE,
@@ -860,16 +820,18 @@ DbResult* sqliteGetTableNames(SqlDatabase *database, const char *dbString) {
   return queryResult;
 }
 
-/// @fn bool sqliteAddDatabase(SqlDatabase *database, const char *dbString)
+/// @fn bool sqliteAddDatabase(void *db, const char *dbString)
 ///
 /// @brief Add a new database to a SQLite instance.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to add the database to.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to add the database to, cast to a void*.
 /// @param dbString The name of the database to add.
 ///
 /// @return Returns true on success, false on failure.
-bool sqliteAddDatabase(SqlDatabase *database, const char *dbString) {
+bool sqliteAddDatabase(void *db, const char *dbString) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -935,16 +897,18 @@ bool sqliteAddDatabase(SqlDatabase *database, const char *dbString) {
   return returnValue;
 }
 
-/// @fn bool sqliteDeleteDatabase(SqlDatabase *database, const char *dbString)
+/// @fn bool sqliteDeleteDatabase(void *db, const char *dbString)
 ///
 /// @brief Add a new database to a SQLite instance.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to add the database to.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to add the database to, cast to a void*.
 /// @param dbString The name of the database to add.
 ///
 /// @return Returns true on success, false on failure.
-bool sqliteDeleteDatabase(SqlDatabase *database, const char *dbString) {
+bool sqliteDeleteDatabase(void *db, const char *dbString) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -1088,7 +1052,7 @@ Bytes sqliteMakeStringLiteral(const char *input) {
   return returnValue;
 }
 
-/// @fn bool sqliteStartTransaction(SqlDatabase *database)
+/// @fn bool sqliteStartTransaction(void *db)
 ///
 /// @brief Start a transaction for this thread in the database.
 ///
@@ -1096,13 +1060,15 @@ Bytes sqliteMakeStringLiteral(const char *input) {
 /// connections are managed by thread on our side, so this transaction will
 /// only apply to this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns true if starting the transaction was successful, false
 /// if not.
-bool sqliteStartTransaction(SqlDatabase *database) {
-  printLog(TRACE, "ENTER sqliteStartTransaction()\n");
+bool sqliteStartTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
+  printLog(TRACE, "ENTER sqliteStartTransaction(database=%p)\n", database);
   
   if (database == NULL) {
     // Nothing to do.
@@ -1139,7 +1105,7 @@ bool sqliteStartTransaction(SqlDatabase *database) {
   return startSuccessful;
 }
 
-/// @fn bool sqliteCommitTransaction(SqlDatabase *database)
+/// @fn bool sqliteCommitTransaction(void *db)
 ///
 /// @brief Commit an in-progress transaction for this thread in the database.
 ///
@@ -1147,12 +1113,14 @@ bool sqliteStartTransaction(SqlDatabase *database) {
 /// connections are managed by thread on our side, so this commit will
 /// only apply to transactions in progress on this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns true if committing the transaction was successful, false
 /// if not.
-bool sqliteCommitTransaction(SqlDatabase *database) {
+bool sqliteCommitTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER sqliteCommitTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -1203,7 +1171,7 @@ bool sqliteCommitTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn bool sqliteRollbackTransaction(SqlDatabase *database)
+/// @fn bool sqliteRollbackTransaction(void *db)
 ///
 /// @brief Rollback an in-progress transaction for this thread in the database.
 ///
@@ -1211,12 +1179,14 @@ bool sqliteCommitTransaction(SqlDatabase *database) {
 /// connections are managed by threads on our side, so this rollback will
 /// only apply to transactions in progress on this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns true if rolling back the transaction was successful, false
 /// if not.
-bool sqliteRollbackTransaction(SqlDatabase *database) {
+bool sqliteRollbackTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER sqliteRollbackTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -1267,16 +1237,18 @@ bool sqliteRollbackTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn SqlDatabase* sqliteDisconnect(SqlDatabase *sqlDatabase)
+/// @fn void* sqliteDisconnect(void *db)
 ///
 /// @brief Disconnect from a MariaDB connection.
 ///
-/// @param sqlDatabase A pointer to a SqlDatabase object that hosts a pointer to
-///   a Sqlite object.
+/// @param db A pointer to a SqlDatabase object that hosts a pointer to
+///   a Sqlite object, cast to a void*.
 ///
 /// @return Returns NULL on success, the original unmodified sqlDatabase pointer
 /// on failure.
-SqlDatabase* sqliteDisconnect(SqlDatabase *sqlDatabase) {
+void* sqliteDisconnect(void *db) {
+  SqlDatabase *sqlDatabase = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER sqliteDisconnect(sqlDatabase=%p)\n", sqlDatabase);
   
   if (sqlDatabase == NULL) {
@@ -1370,20 +1342,21 @@ SqlDatabase* sqliteDisconnect(SqlDatabase *sqlDatabase) {
   return sqlDatabase;
 }
 
-/// @fn DbResult* sqliteDescribeTable(Sqlite *database, const char *dbString, const char *tableName)
+/// @fn DbResult* sqliteDescribeTable(void *connection, const char *dbString, const char *tableName)
 ///
 /// @brief Describe a table in a SQLite database.
 ///
-/// @param database A pointer to the Sqlite object representing the database
-///   system to query.
+/// @param connection A pointer to the Sqlite object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to query.
 /// @param tableName The name of the table to describe.
 ///
 /// @return Returns a DbResult object with the names of the table fields and
 /// their types.
-DbResult* sqliteDescribeTable(Sqlite *database, const char *dbString,
+DbResult* sqliteDescribeTable(void *connection, const char *dbString,
   const char *tableName
 ) {
+  Sqlite *database = (Sqlite*) connection;
   printLog(TRACE,
     "ENTER sqliteDescribeTable(database=%p, dbString=%s, tableName=%s)\n",
     database, dbString, tableName);
@@ -1688,20 +1661,20 @@ bool sqliteChangeFieldType(void *db, const char *dbName,
   return successful;
 }
 
-/// @fn bool sqliteLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock)
+/// @fn bool sqliteLockTablesDict(void *db, const Dictionary *tablesToLock)
 ///
 /// @brief Get a write lock in the database on the specified tables.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param tablesToLock A Dictionary (HashTable) where the keys are the names of
 ///   the tables to lock.  Values are ignored.  This function does *NOT* take
 ///   ownership of this data structure.  The caller must destroy it.
 ///
 /// @return Returns true if the tables were locked successfully, false if not.
-bool sqliteLockTablesDict(SqlDatabase *database,
-  const Dictionary *tablesToLock
-) {
+bool sqliteLockTablesDict(void *db, const Dictionary *tablesToLock) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqliteLockTablesDict(database=%p, tablesToLock=%p)\n",
     database, tablesToLock);
@@ -1772,18 +1745,20 @@ bool sqliteLockTablesDict(SqlDatabase *database,
   return querySuccessful;
 }
 
-/// @fn bool sqliteUnlockTables(SqlDatabase *database, const Dictionary *tableLock)
+/// @fn bool sqliteUnlockTables(void *db, const Dictionary *tableLock)
 ///
 /// @brief Unlock previously-locked tables and clear the cache of locked tables
 /// for this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the
-///   database system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 /// @param tableLock A pointer to a Dictionary returned by a previous call to
 ///   one of the sqliteLockTables functions.
 ///
 /// @return This function always returns NULL.
-bool sqliteUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
+bool sqliteUnlockTables(void *db, const Dictionary *tableLock) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqliteUnlockTables(database=%p, tableLock=%p)\n",
     database, tableLock);
@@ -1856,7 +1831,7 @@ bool sqliteUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
   return querySuccessful;
 }
 
-/// @fn bool sqliteAddField(SqlDatabase *database, const char *dbString, const char *tableName, const char *afterField, const char *newField, void *type)
+/// @fn bool sqliteAddField(void *db, const char *dbString, const char *tableName, const char *afterField, const char *newField, void *type)
 ///
 /// @brief Add a new field to an existing table in a database.
 ///
@@ -1873,10 +1848,12 @@ bool sqliteUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
 ///
 /// @return Returns true if adding the field to the table was successful,
 /// false if not.
-bool sqliteAddField(SqlDatabase *database, const char *dbString,
+bool sqliteAddField(void *db, const char *dbString,
   const char *tableName, const char *afterField, const char *newField,
   void *type
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER sqliteAddField(database=%p, dbString=\"%s\", tableName=\"%s\", "
     "afterField=\"%s\", newField=\"%s\", type=%p)\n",
@@ -1963,7 +1940,7 @@ bool sqliteAddField(SqlDatabase *database, const char *dbString,
   // FIXME:  If we ever figure out a way to properly record and manage the
   // primary keys of tables in SQLite, update this logic acccordingly.
   DbResult *fieldTypes = (DbResult*) scopeAdd(
-    sqliteDescribeTable((Sqlite*) database->connection, dbString, tableName),
+    sqliteDescribeTable(database->connection, dbString, tableName),
     dbFreeResult);
   if (fieldTypes->successful == false) {
     printLog(ERR, "Could not get field types for %s.%s from the database.\n",
@@ -2220,20 +2197,23 @@ int sqliteCompare(void *db1, void *db2) {
   return returnValue;
 }
 
-/// @fn bool sqliteRenameTable(SqlDatabase *database, const char *dbName, const char *oldTableName, const char *newTableName)
+/// @fn bool sqliteRenameTable(void *db, const char *dbName, const char *oldTableName, const char *newTableName)
 ///
 /// @brief Rename a table in a database.
 ///
-/// @param database A pointer to a SqlDatabase object that manages the system.
+/// @param db A pointer to a SqlDatabase object that manages the system, cast
+///   to a void*.
 /// @param dbName The name of the database in the SQL database.
 /// @param oldTableName The name of the table as it exists in the database at
 ///   the time this call is made.
 /// @param newTableName The deisred new name of the table.
 ///
 /// @return Returns true on success, false on failure.
-bool sqliteRenameTable(SqlDatabase *database, const char *dbName,
+bool sqliteRenameTable(void *db, const char *dbName,
   const char *oldTableName, const char *newTableName
 ) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   bool returnValue = true;
   
   printLog(TRACE, "ENTER sqliteRenameTable(database=%p, dbName=\"%s\", "

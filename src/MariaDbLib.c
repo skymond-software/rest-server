@@ -63,14 +63,14 @@ int mariaDbConnect(const char *remoteHostAddress,
   const char *username, const char *password,
   MariaDbPasswordHashType passwordHashType,
   char **connectionAddress);
-DbResult* mariaDbExecQueryBytes(MariaDb *database, const Bytes query);
-DbResult* mariaDbExecQueryString(MariaDb *database, const char *query);
+DbResult* mariaDbExecQueryBytes(void *connection, const Bytes query);
+DbResult* mariaDbExecQueryString(void *connection, const char *query);
 char* binToHex(const unsigned char *bin, long long unsigned int length,
   char *outputString);
-DbResult* mariaDbGetDatabaseNames(SqlDatabase *database);
-DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString);
-bool mariaDbAddDatabase(SqlDatabase *database, const char *dbName);
-bool mariaDbDeleteDatabase(SqlDatabase *database, const char *dbName);
+DbResult* mariaDbGetDatabaseNames(void *connection);
+DbResult* mariaDbGetTableNames(void *db, const char *dbString);
+bool mariaDbAddDatabase(void *connection, const char *dbName);
+bool mariaDbDeleteDatabase(void *connection, const char *dbName);
 Bytes mariaDbMakeStringLiteral(const char *input);
 Bytes mariaDbMakeBytesLiteral(const Bytes input);
 bool mariaDbEnsureFieldIndexedVargs(void *database,
@@ -100,13 +100,13 @@ void* mariaDbGetFloat(
   unsigned char **packetData, u64 *index, u32 *bytesReceived);
 void* mariaDbGetDouble(
   unsigned char **packetData, u64 *index, u32 *bytesReceived);
-bool mariaDbStartTransaction(SqlDatabase *database);
-bool mariaDbCommitTransaction(SqlDatabase *database);
-bool mariaDbRollbackTransaction(SqlDatabase *database);
-bool mariaDbLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock);
-bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock);
-SqlDatabase* mariaDbDisconnect(SqlDatabase *sqlDatabase);
-DbResult* mariaDbDescribeTable(MariaDb *database, const char *dbString,
+bool mariaDbStartTransaction(void *connection);
+bool mariaDbCommitTransaction(void *connection);
+bool mariaDbRollbackTransaction(void *connection);
+bool mariaDbLockTablesDict(void *connection, const Dictionary *tablesToLock);
+bool mariaDbUnlockTables(void *connection, const Dictionary *tableLock);
+void* mariaDbDisconnect(void *connection);
+DbResult* mariaDbDescribeTable(void *connection, const char *dbString,
   const char *tableName);
 int mariaDbCompare(void *db1, void *db2);
 bool mariaDbChangeFieldType(void *db, const char *dbString,
@@ -769,16 +769,13 @@ Database* mariaDbInit_(const char *ignored,
       mariaDbPasswordHashTypeNames[passwordHashType]);
     return NULL;
   }
-  sqlDatabase->bytesQuery =
-    (DbResult* (*)(void *database, const Bytes query)) mariaDbExecQueryBytes;
-  sqlDatabase->stringQuery = 
-    (DbResult* (*)(void *database, const char *query)) mariaDbExecQueryString;
+  sqlDatabase->bytesQuery = mariaDbExecQueryBytes;
+  sqlDatabase->stringQuery = mariaDbExecQueryString;
   sqlDatabase->makeBytesLiteral = mariaDbMakeBytesLiteral;
   sqlDatabase->makeStringLiteral = mariaDbMakeStringLiteral;
   sqlDatabase->connection = mariaDb;
   sqlDatabase->sqlDbType = MARIADB;
-  sqlDatabase->describeTable = (DbResult* (*)(void *database, const char *dbName,
-    const char *tableName)) mariaDbDescribeTable;
+  sqlDatabase->describeTable = mariaDbDescribeTable;
   sqlDatabase->compare = mariaDbCompare;
   sqlDatabase->tableDescriptions = htCreate(typeBytes);
   
@@ -786,7 +783,7 @@ Database* mariaDbInit_(const char *ignored,
   // The lock member mtx_t variable has to be zeroed, so use calloc.
   Database *database = (Database*) calloc(1, sizeof(Database));
   if (database == NULL) {
-    sqlDatabase = mariaDbDisconnect(sqlDatabase);;
+    sqlDatabase = (SqlDatabase*) mariaDbDisconnect(sqlDatabase);;
     LOG_MALLOC_FAILURE();
     printLog(TRACE,
       "EXIT mariaDbInit(remoteHostAddress=\"%s\", username=\"%s\", "
@@ -795,77 +792,35 @@ Database* mariaDbInit_(const char *ignored,
       mariaDbPasswordHashTypeNames[passwordHashType]);
     return NULL;
   }
-  database->getValuesVargs = (DbResult* (*)(void *database,
-    const char *dbString, const char *tableName,
-    const char *select, const char *orderBy, va_list args)) sqlGetValuesVargs;
-  database->getValuesDict = (DbResult* (*)(void *database,
-    const char *dbString, const char *tableName,
-    const char *select, const char *orderBy,
-    Dictionary *args)) sqlGetValuesDict;
-  database->addRecordVargs = (bool (*)(void *database,
-    const char *dbString, const char *tableName, va_list args))
-    sqlAddRecordVargs;
-  database->getDatabaseNames = (DbResult* (*)(void *database))
-    mariaDbGetDatabaseNames;
-  database->addTableVargs = (bool (*)(void *database,
-    const char *dbName, const char *tableName, const char *primaryKey,
-    va_list args)) sqlAddTableVargs;
-  database->getTableNames = (DbResult* (*)(void *database, const char *dbName))
-    mariaDbGetTableNames;
-  database->deleteRecordsVargs = (bool (*)(void *database,
-    const char *dbString, const char *tableName, va_list args))
-    sqlDeleteRecordsVargs;
-  database->updateRecordDict = (bool (*)(void *database,
-    const char *dbString, const char *tableName, Dictionary *dict))
-    sqlUpdateRecordDict;
-  database->addRecordDict = (bool (*)(void *database,
-    const char *dbString, const char *tableName,
-    Dictionary *dict)) sqlAddRecordDict;
-  database->getValuesLikeVargs = (DbResult* (*)(void *database,
-    const char *dbName, const char *tableName,
-    const char *select, const char *orderBy, va_list args))
-    sqlGetValuesLikeVargs;
-  database->addTableList = (bool (*)(void *database,
-    const char *dbName, const char *tableName, const char *primaryKey,
-    List *args)) sqlAddTableList;
-  database->deleteTable = (bool (*)(void *database,
-    const char *dbString, const char *tableName)) sqlDeleteTable;
-  database->deleteRecordsLikeVargs = (bool (*)(void *database,
-    const char *dbString, const char *tableName, va_list args))
-    sqlDeleteRecordsLikeVargs;
-  database->updateResultVargs
-    = (bool (*)(const DbResult *dbResult, u64 resultIndex, va_list args))
-    sqlUpdateResultVargs;
-  database->lockTablesDict = (bool (*)(void *database,
-    const Dictionary *tablesToLock)) mariaDbLockTablesDict;
-  database->unlockTables
-    = (bool (*)(void *database, const Dictionary *tableLock)) mariaDbUnlockTables;
-  database->startTransaction = (bool (*)(void *database)) mariaDbStartTransaction;
-  database->commitTransaction = (bool (*)(void *database)) mariaDbCommitTransaction;
-  database->rollbackTransaction
-    = (bool (*)(void *database)) mariaDbRollbackTransaction;
-  database->addDatabase
-    = (bool (*)(void *database, const char* dbName)) mariaDbAddDatabase;
-  database->deleteDatabase
-    = (bool (*)(void *database, const char* dbName)) mariaDbDeleteDatabase;
-  database->deleteField
-    = (bool (*)(void *database, const char *dbString,
-    const char *tableName, const char *fieldName)) sqlDeleteField;
-  database->addField
-    = (bool (*)(void *database, const char *dbString,
-    const char *tableName, const char *afterField, const char *newField,
-    void *type)) sqlAddField;
+  database->getValuesVargs = sqlGetValuesVargs;
+  database->getValuesDict = sqlGetValuesDict;
+  database->addRecordVargs = sqlAddRecordVargs;
+  database->getDatabaseNames = mariaDbGetDatabaseNames;
+  database->addTableVargs = sqlAddTableVargs;
+  database->getTableNames = mariaDbGetTableNames;
+  database->deleteRecordsVargs = sqlDeleteRecordsVargs;
+  database->updateRecordDict = sqlUpdateRecordDict;
+  database->addRecordDict = sqlAddRecordDict;
+  database->getValuesLikeVargs = sqlGetValuesLikeVargs;
+  database->addTableList = sqlAddTableList;
+  database->deleteTable = sqlDeleteTable;
+  database->deleteRecordsLikeVargs = sqlDeleteRecordsLikeVargs;
+  database->updateResultVargs = sqlUpdateResultVargs;
+  database->lockTablesDict = mariaDbLockTablesDict;
+  database->unlockTables = mariaDbUnlockTables;
+  database->startTransaction = mariaDbStartTransaction;
+  database->commitTransaction = mariaDbCommitTransaction;
+  database->rollbackTransaction = mariaDbRollbackTransaction;
+  database->addDatabase = mariaDbAddDatabase;
+  database->deleteDatabase = mariaDbDeleteDatabase;
+  database->deleteField = sqlDeleteField;
+  database->addField = sqlAddField;
   database->changeFieldType = mariaDbChangeFieldType;
-  database->changeFieldName
-    = (bool (*)(void *database, const char *dbString,
-    const char *tableName, const char *oldName, const char *newName))
-    sqlChangeFieldName;
-  database->disconnect = (void* (*)(void*)) mariaDbDisconnect;
-  database->describeTable = (DbResult* (*)(void *database, const char *dbName,
-    const char *tableName)) sqlDescribeTable;
+  database->changeFieldName = sqlChangeFieldName;
+  database->disconnect = mariaDbDisconnect;
+  database->describeTable = sqlDescribeTable;
   database->addRecords = mariaDbAddRecords;
-  database->renameTable = (bool (*)(void *database, const char *dbName,
-    const char *oldTableName, const char *newTableName)) sqlRenameTable;
+  database->renameTable = sqlRenameTable;
   database->compare = sqlCompare;
   database->getNumRecords = sqlGetNumRecords;
   database->getOrValuesDict = sqlGetOrValuesDict;
@@ -2911,18 +2866,21 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
   return returnValue;
 }
 
-/// @fn DbResult* mariaDbExecQueryBytes(MariaDb *database, const Bytes query)
+/// @fn DbResult* mariaDbExecQueryBytes(void *connection, const Bytes query)
 ///
 /// @brief Send a SQL query to the server.  If the query fails, try once more
 /// in case the connection to the database had died.
 ///
-/// @param database The MariaDb object with the database metadata.
+/// @param connection The MariaDb object with the database metadata cast to a
+///   void*.
 /// @param query is the SQL query Bytes object to send.
 ///
 /// @return Returns a DbResult containing the server's results on success,
 /// an empty DbResult on failure.
-DbResult* mariaDbExecQueryBytes(MariaDb *database, const Bytes query) {
+DbResult* mariaDbExecQueryBytes(void *connection, const Bytes query) {
   printLog(TRACE, "ENTER mariaDbExecQueryBytes(query=%p)\n", query);
+
+  MariaDb *database = (MariaDb*) connection;
   
   call_once(&_mariaDbThreadSetup, setupMariaDbThreadMetadata);
   
@@ -2939,20 +2897,22 @@ DbResult* mariaDbExecQueryBytes(MariaDb *database, const Bytes query) {
   return queryResult;
 }
 
-/// @fn DbResult* mariaDbExecQueryString(MariaDb *database, const Bytes query)
+/// @fn DbResult* mariaDbExecQueryString(void *connection, const Bytes query)
 ///
 /// @brief Send a SQL query string to the server.
 ///
-/// @param database The MariaDb object with the database metadata.
+/// @param connection The MariaDb object with the database metadata cast to a
+///   void*.
 /// @param query is the SQL query string to send.
 ///
 /// @return Returns a DbResult object containing the server's results on
 /// success, empty DbResult on failure.
-DbResult* mariaDbExecQueryString(MariaDb *database, const char *queryString) {
+DbResult* mariaDbExecQueryString(void *connection, const char *queryString) {
   printLog(TRACE,
     "ENTER mariaDbExecQueryString(queryString=\"%s\")\n",
     queryString);
   
+  MariaDb *database = (MariaDb*) connection;
   Bytes queryBytes = NULL;
   bytesAddStr(&queryBytes, queryString);
   printLog(DEBUG, "Running query \"%s\"\n", queryString);
@@ -3823,21 +3783,23 @@ void* mariaDbGetDouble(
   return returnValue;
 }
 
-/// @fn DbResult* mariaDbGetDatabaseNames(SqlDatabase *database)
+/// @fn DbResult* mariaDbGetDatabaseNames(void *db)
 ///
 /// @brief Get the names of the databases managed by the SQL system.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 ///
 /// @return Returns a DbResult object with the names of the databases.
-DbResult* mariaDbGetDatabaseNames(SqlDatabase *database) {
+DbResult* mariaDbGetDatabaseNames(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER mariaDbGetDatabaseNames(database=%p))\n",
     database);
   
   DbResult *queryResult
-    = mariaDbExecQueryString((MariaDb*) database->connection, "show databases;");
+    = mariaDbExecQueryString(database->connection, "show databases;");
   
   printLog(TRACE,
     "EXIT mariaDbGetDatabaseNames(database=%p) = {%s}\n",
@@ -3845,16 +3807,18 @@ DbResult* mariaDbGetDatabaseNames(SqlDatabase *database) {
   return queryResult;
 }
 
-/// @fn DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString)
+/// @fn DbResult* mariaDbGetTableNames(void *db, const char *dbString)
 ///
 /// @brief Get the names of the tables in a database.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to query.
 ///
 /// @return Returns a DbResult object with the names of the tables.
-DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
+DbResult* mariaDbGetTableNames(void *db, const char *dbString) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   char *dbName = NULL;
   straddstr(&dbName, dbString);
   straddstr(&dbName, dbInstance);
@@ -3881,7 +3845,7 @@ DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
   bytesAddStr(&query, "use ");
   bytesAddStr(&query, dbName);
   bytesAddStr(&query, ";");
-  queryResult = mariaDbExecQueryBytes((MariaDb*) database->connection, query);
+  queryResult = mariaDbExecQueryBytes(database->connection, query);
   query = bytesDestroy(query);
   if (queryResult->successful == false) {
     printLog(TRACE,
@@ -3896,7 +3860,7 @@ DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
   queryResult = dbFreeResult(queryResult);
   
   bytesAddStr(&query, "show tables;");
-  queryResult = mariaDbExecQueryBytes((MariaDb*) database->connection, query);
+  queryResult = mariaDbExecQueryBytes(database->connection, query);
   query = bytesDestroy(query);
   mariaDbCommitTransaction(database);
   
@@ -3910,16 +3874,18 @@ DbResult* mariaDbGetTableNames(SqlDatabase *database, const char *dbString) {
   return returnValue;
 }
 
-/// @fn bool mariaDbAddDatabase(SqlDatabase *database, const char *dbString)
+/// @fn bool mariaDbAddDatabase(void *db, const char *dbString)
 ///
 /// @brief Add a new database to a MariaDB server.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to add the database to.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to add the database to, cast to a void*.
 /// @param dbString The name of the database to add.
 ///
 /// @return Returns true on success, false on failure.
-bool mariaDbAddDatabase(SqlDatabase *database, const char *dbName) {
+bool mariaDbAddDatabase(void *db, const char *dbName) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER mariaDbAddDatabase(database=%p, dbName=\"%s\")\n",
     database, dbName);
@@ -3935,7 +3901,7 @@ bool mariaDbAddDatabase(SqlDatabase *database, const char *dbName) {
       database, dbName);
     return false;
   }
-  queryResult = mariaDbExecQueryString((MariaDb*) database->connection, query);
+  queryResult = mariaDbExecQueryString(database->connection, query);
   query = stringDestroy(query);
   bool returnValue = queryResult->successful;
   queryResult = dbFreeResult(queryResult);
@@ -3946,16 +3912,18 @@ bool mariaDbAddDatabase(SqlDatabase *database, const char *dbName) {
   return returnValue;
 }
 
-/// @fn bool mariaDbDeleteDatabase(SqlDatabase *database, const char *dbString)
+/// @fn bool mariaDbDeleteDatabase(void *db, const char *dbString)
 ///
 /// @brief Delete a database from a MariaDB server.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to delete the database from.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to delete the database from, cast to a void*.
 /// @param dbString The name of the database to delete.
 ///
 /// @return Returns true on success, false on failure.
-bool mariaDbDeleteDatabase(SqlDatabase *database, const char *dbName) {
+bool mariaDbDeleteDatabase(void *db, const char *dbName) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER mariaDbDeleteDatabase(database=%p, dbName=\"%s\")\n",
     database, dbName);
@@ -3971,7 +3939,7 @@ bool mariaDbDeleteDatabase(SqlDatabase *database, const char *dbName) {
       database, dbName);
     return false;
   }
-  queryResult = mariaDbExecQueryString((MariaDb*) database->connection, query);
+  queryResult = mariaDbExecQueryString(database->connection, query);
   query = stringDestroy(query);
   bool returnValue = queryResult->successful;
   queryResult = dbFreeResult(queryResult);
@@ -4079,7 +4047,7 @@ Bytes mariaDbMakeStringLiteral(const char *input) {
   return returnValue;
 }
 
-/// @fn bool mariaDbStartTransaction(SqlDatabase *database)
+/// @fn bool mariaDbStartTransaction(void *db)
 ///
 /// @brief Start a transaction for this thread in the database.
 ///
@@ -4087,12 +4055,14 @@ Bytes mariaDbMakeStringLiteral(const char *input) {
 /// connections are managed by thread on our side, so this transaction will
 /// only apply to this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 ///
 /// @return Returns true if starting the transaction was successful, false
 /// if not.
-bool mariaDbStartTransaction(SqlDatabase *database) {
+bool mariaDbStartTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER mariaDbStartTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -4130,16 +4100,18 @@ bool mariaDbStartTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn SqlDatabase* mariaDbDisconnect(SqlDatabase *sqlDatabase)
+/// @fn void* mariaDbDisconnect(void *db)
 ///
 /// @brief Disconnect from a MariaDB connection.
 ///
-/// @param sqlDatabase A pointer to a SqlDatabase object that hosts a pointer to
-///   a MariaDb object.
+/// @param db A pointer to a SqlDatabase object that hosts a pointer to
+///   a MariaDb object, cast to a void*.
 ///
 /// @return Returns NULL on success, the original unmodified sqlDatabase pointer
 /// on failure.
-SqlDatabase* mariaDbDisconnect(SqlDatabase *sqlDatabase) {
+void * mariaDbDisconnect(void *db) {
+  SqlDatabase *sqlDatabase = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER mariaDbDisconnect(sqlDatabase=%p)\n", sqlDatabase);
   
   if (sqlDatabase == NULL) {
@@ -4265,20 +4237,21 @@ unsigned char *hexStringToSha1(const char *hexString) {
   return returnValue;
 }
 
-/// @fn DbResult* mariaDbDescribeTable(MariaDb *database, const char *dbString, const char *tableName)
+/// @fn DbResult* mariaDbDescribeTable(void *connection, const char *dbString, const char *tableName)
 ///
 /// @brief Describe a table in a SQLite database.
 ///
-/// @param database A pointer to the MariaDb object representing the database
-///   system to query.
+/// @param connection A pointer to the MariaDb object representing the database
+///   system to query, cast to a void*.
 /// @param dbString The name of the database to query.
 /// @param tableName The name of the table to describe.
 ///
 /// @return Returns a DbResult object with the names of the table fields and
 /// their types.
-DbResult* mariaDbDescribeTable(MariaDb *database, const char *dbString,
+DbResult* mariaDbDescribeTable(void *connection, const char *dbString,
   const char *tableName
 ) {
+  MariaDb *database = (MariaDb*) connection;
   printLog(TRACE,
     "ENTER mariaDbDescribeTable(database=%p, dbString=%s, tableName=%s)\n",
     database, dbString, tableName);
@@ -4647,7 +4620,7 @@ bool mariaDbRenameDatabase(void *db,
   return returnValue;
 }
 
-/// @fn bool mariaDbCommitTransaction(SqlDatabase *database)
+/// @fn bool mariaDbCommitTransaction(void *db)
 ///
 /// @brief Commit an in-progress transaction for this thread in the database.
 ///
@@ -4655,12 +4628,14 @@ bool mariaDbRenameDatabase(void *db,
 /// connections are managed by thread on our side, so this commit will
 /// only apply to transactions in progress on this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 ///
 /// @return Returns true if committing the transaction was successful, false
 /// if not.
-bool mariaDbCommitTransaction(SqlDatabase *database) {
+bool mariaDbCommitTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER mariaDbCommitTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -4698,7 +4673,7 @@ bool mariaDbCommitTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn bool mariaDbRollbackTransaction(SqlDatabase *database)
+/// @fn bool mariaDbRollbackTransaction(void *db)
 ///
 /// @brief Rollback an in-progress transaction for this thread in the database.
 ///
@@ -4706,12 +4681,14 @@ bool mariaDbCommitTransaction(SqlDatabase *database) {
 /// connections are managed by threads on our side, so this rollback will
 /// only apply to transactions in progress on this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 ///
 /// @return Returns true if rolling back the transaction was successful, false
 /// if not.
-bool mariaDbRollbackTransaction(SqlDatabase *database) {
+bool mariaDbRollbackTransaction(void *db) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE, "ENTER mariaDbRollbackTransaction(database=%p)\n", database);
   
   if (database == NULL) {
@@ -4749,18 +4726,20 @@ bool mariaDbRollbackTransaction(SqlDatabase *database) {
   return querySuccessful;
 }
 
-/// @fn bool mariaDbLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock)
+/// @fn bool mariaDbLockTablesDict(void *db, const Dictionary *tablesToLock)
 ///
 /// @brief Get a write lock in the database on the specified tables.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 /// @param tablesToLock A Dictionary (HashTable) where the keys are the names of
 ///   the tables to lock.  Values are ignored.  This function does *NOT* take
 ///   ownership of this data structure.  The caller must destroy it.
 ///
 /// @return Returns true if the tables were locked successfully, false if not.
-bool mariaDbLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock) {
+bool mariaDbLockTablesDict(void *db, const Dictionary *tablesToLock) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER mariaDbLockTablesDict(database=%p, tablesToLock=%p)\n",
     database, tablesToLock);
@@ -4820,18 +4799,20 @@ bool mariaDbLockTablesDict(SqlDatabase *database, const Dictionary *tablesToLock
   return querySuccessful;
 }
 
-/// @fn bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock)
+/// @fn bool mariaDbUnlockTables(void *db, const Dictionary *tableLock)
 ///
 /// @brief Unlock previously-locked tables and clear the cache of locked tables
 /// for this thread.
 ///
-/// @param database A pointer to the SqlDatabase object representing the database
-///   system to query.
+/// @param db A pointer to the SqlDatabase object representing the
+///   database system to query, cast to a void*.
 /// @param tableLock A pointer to a Dictionary returned by a previous call to
 ///   one of the sqlLockTables functions.
 ///
 /// @return This function always returns NULL.
-bool mariaDbUnlockTables(SqlDatabase *database, const Dictionary *tableLock) {
+bool mariaDbUnlockTables(void *db, const Dictionary *tableLock) {
+  SqlDatabase *database = (SqlDatabase*) db;
+  
   printLog(TRACE,
     "ENTER mariaDbUnlockTables(database=%p, tableLock=%p)\n",
     database, tableLock);
