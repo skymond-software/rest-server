@@ -15,7 +15,6 @@ CNEXT_OBJ_FILES := \
     $(CNEXT_OBJ_DIR)/HashTable.o \
     $(CNEXT_OBJ_DIR)/List.o \
     $(CNEXT_OBJ_DIR)/Messages.o \
-    $(CNEXT_OBJ_DIR)/LinuxProcessSync.o \
     $(CNEXT_OBJ_DIR)/LoggingLib.o \
     $(CNEXT_OBJ_DIR)/PosixCThreads.o \
     $(CNEXT_OBJ_DIR)/PosixProcesses.o \
