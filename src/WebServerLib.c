@@ -1053,7 +1053,7 @@ int handleGetRequest(WsThreadInfo *wsThreadInfo) {
         wsThreadInfo, 1);
       return returnValue;
     }
-    Dictionary *tempDict = NULL;
+    Dictionary *tempDict = dictionaryCreate(typeString);
     // Prepend "GET:" to all parameter names.  This is to distinguish them from
     // POST parameters.  GET parameters can be faked by cross-site request
     // forgery while POST parameters cannot.  This will force the called method
@@ -1064,7 +1064,7 @@ int handleGetRequest(WsThreadInfo *wsThreadInfo) {
       char *parameterName = NULL;
       straddstr(&parameterName, "GET:");
       straddstr(&parameterName, (char*) node->key);
-      dictionaryAddEntry(&tempDict, parameterName, node->value);
+      dictionaryAddEntry(tempDict, parameterName, node->value);
       parameterName = stringDestroy(parameterName);
     }
     args = dictionaryDestroy(args);
@@ -1217,7 +1217,7 @@ int parseCookies(WsThreadInfo *wsThreadInfo) {
     (wsThreadInfo->clientSocket->socketMode == TLS) ? "https" :
     "http";
 
-  Dictionary *tempDict = NULL;
+  Dictionary *tempDict = dictionaryCreate(typeString);
   char *protocolAndDomain = NULL;
   if (asprintf(&protocolAndDomain, "%s://%s.",
     protocol, (char*) host) > 0
@@ -1232,7 +1232,7 @@ int parseCookies(WsThreadInfo *wsThreadInfo) {
       char *cookieName = strReplaceStr((char*) node->key, protocolAndDomain, "");
       printLog(DEBUG, "Replacing \"%s\" with \"%s\".\n",
         (char*) node->key, cookieName);
-      dictionaryAddEntry(&tempDict, cookieName, node->value);
+      dictionaryAddEntry(tempDict, cookieName, node->value);
       cookieName = stringDestroy(cookieName);
     }
   }
@@ -1317,7 +1317,7 @@ Dictionary* parseHeader(const Bytes receiveBuffer) {
       = getDataBetween(commandLinePointer, commandLineLength, "", 0, " ", 1);
     u64 httpCommandLength = bytesLength(httpCommand);
     DictionaryEntry *entry
-      = dictionaryAddEntry(&parameters, "_httpCommand",
+      = dictionaryAddEntry(parameters, "_httpCommand",
         httpCommand, typeBytesNoCopy);
     printLog(DEBUG, "httpCommand = \"%s\"\n", str(httpCommand));
     if (entry == NULL) {
@@ -1340,7 +1340,7 @@ Dictionary* parseHeader(const Bytes receiveBuffer) {
         = getDataBetween(commandLinePointer, commandLineLength, "", 0, "", 0);
     }
     u64 httpLocationLength = bytesLength(httpLocation);
-    entry = dictionaryAddEntry(&parameters, "_httpLocation",
+    entry = dictionaryAddEntry(parameters, "_httpLocation",
       httpLocation, typeBytesNoCopy);
     if (entry == NULL) {
       commandLine = bytesDestroy(commandLine);
@@ -1360,7 +1360,7 @@ Dictionary* parseHeader(const Bytes receiveBuffer) {
     
     Bytes httpProtocol
       = getDataBetween(commandLinePointer, commandLineLength, "", 0, "", 0);
-    entry = dictionaryAddEntry(&parameters, "_httpProtocol",
+    entry = dictionaryAddEntry(parameters, "_httpProtocol",
       httpProtocol, typeBytesNoCopy);
     if (entry == NULL) {
       commandLine = bytesDestroy(commandLine);
@@ -1407,7 +1407,7 @@ Dictionary* parseHeader(const Bytes receiveBuffer) {
           }
           
           DictionaryEntry *entry
-            = dictionaryAddEntry(&parameters, parameterName,
+            = dictionaryAddEntry(parameters, parameterName,
               parameterValue, typeBytesNoCopy);
           if (entry == NULL) {
             LOG_MALLOC_FAILURE();
@@ -2909,8 +2909,8 @@ Dictionary* redirectUnitTestFunction(Socket *clientSocket,
   asprintf(&redirectUrl, "%s%s", host, httpLocation);
   host = stringDestroy(host);
   
-  Dictionary *outputParams = NULL;
-  dictionaryAddEntry(&outputParams,
+  Dictionary *outputParams = dictionaryCreate(typeString);
+  dictionaryAddEntry(outputParams,
     "redirectUrl", redirectUrl, typeStringNoCopy)->type = typeString;
   
   SCOPE_EXIT("clientSocket=%p, interfacePath=%s, httpParams=%p, body=%p, "
@@ -2941,6 +2941,7 @@ WebService unitTestWebService = {
   NULL,                                    // requestObjectHandler
   wcSerialize,                             // serializeToXml
   xmlToDictionary,                         // deserializeFromXml
+  dictionaryCreate,                        // wsRequestObjectCreate
   (WsSerializeToJson) listToJson,          // serializeToJson
   jsonToDictionary,                        // deserializeFromJson
   dictionaryDestroy,                       // requestObjectDestroy

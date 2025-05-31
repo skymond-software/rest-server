@@ -1711,7 +1711,7 @@ bool sqliteLockTablesDict(void *db, const Dictionary *tablesToLock) {
     cur != NULL;
     cur = cur->next
   ) {
-    dictionaryAddEntry(&sqlite->lockedTables, str(cur->key),
+    dictionaryAddEntry(sqlite->lockedTables, str(cur->key),
       &threadId, typeU64);
   }
   

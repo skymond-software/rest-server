@@ -1246,7 +1246,6 @@ i64 dbGetResultIndexByLookupVargs(const DbResult *dbResult, va_list args) {
     (dbResult != NULL) ? dbResult->dbName : "NULL",
     (dbResult != NULL) ? dbResult->tableName : "NULL");
   
-  Dictionary *lookupDict = NULL;
   i64 resultIndex = -1;
   if (dbResult == NULL) {
     printLog(ERR, "dbResult parameter is NULL.\n");
@@ -1256,16 +1255,18 @@ i64 dbGetResultIndexByLookupVargs(const DbResult *dbResult, va_list args) {
     return resultIndex; // -1, bad status
   }
   
+  Dictionary *lookupDict = dictionaryCreate(typeString);
   for (const char *key = va_arg(args, char*);
     key != NULL;
     key = va_arg(args, char*)
   ) {
     const char *value = va_arg(args, char*);
-    dictionaryAddEntry(&lookupDict, key, value);
+    dictionaryAddEntry(lookupDict, key, value);
   }
   
-  if (lookupDict == NULL) {
+  if (lookupDict->size == 0) {
     printLog(ERR, "No lookup criteria provided.\n");
+    lookupDict = dictionaryDestroy(lookupDict);
     printLog(TRACE,
       "EXIT dbGetResultIndexByLookupVargs(dbName=\"%s\", tableName=\"%s\") "
       "= {%lld}\n", "NULL", "NULL", lld(resultIndex));
@@ -1568,7 +1569,7 @@ Dictionary* dbLockTablesDict(Database *database,
       }
       
       // Table isn't locked by any other thread.  Mark it locked by this one.
-      if (!dictionaryAddEntry(&database->lockedTables,
+      if (!dictionaryAddEntry(database->lockedTables,
         str(cur->key), &threadId, typeU64)
       ) {
         printLog(ERR, "Cannot add table %s to lockedTables hash table.\n",
@@ -1614,7 +1615,7 @@ Dictionary* dbLockTablesDict(Database *database,
   // Initialize the originalLock value for this lock.
   bool originalLock = true;
   DictionaryEntry *entry = 
-    dictionaryAddEntry(&tableLock, "@originalLock", &originalLock, typeBool);
+    dictionaryAddEntry(tableLock, "@originalLock", &originalLock, typeBool);
   if (entry == NULL) {
     // Memory allocation failure.  Bail.
     LOG_MALLOC_FAILURE();
@@ -1628,7 +1629,7 @@ Dictionary* dbLockTablesDict(Database *database,
   }
   // Initialize the databasea value for this lock.
   entry
-    = dictionaryAddEntry(&tableLock, "@database", database, typePointerNoCopy);
+    = dictionaryAddEntry(tableLock, "@database", database, typePointerNoCopy);
   if (entry == NULL) {
     // Memory allocation failure.  Bail.
     LOG_MALLOC_FAILURE();
@@ -1677,7 +1678,7 @@ Dictionary* dbLockTablesDict(Database *database,
 Dictionary* dbLockTablesVargs(Database *database, va_list args) {
   printLog(TRACE, "ENTER_dbLockTablesVargs(database=%p)\n", database);
   
-  Dictionary *tablesDict = NULL;
+  Dictionary *tablesDict = dictionaryCreate(typeString);
   
   char *dbName = va_arg(args, char*);
   while (dbName != NULL) {
@@ -1715,7 +1716,7 @@ Dictionary* dbLockTablesVargs(Database *database, va_list args) {
       tablesDict = dictionaryDestroy(tablesDict);
       return NULL;
     }
-    if (dictionaryAddEntry(&tablesDict, fullTableName, NULL, typePointerNoCopy)
+    if (dictionaryAddEntry(tablesDict, fullTableName, NULL, typePointerNoCopy)
       == NULL
     ) {
       // Memory allocation failure.  Bail.  Cannot use printLog.
@@ -4267,7 +4268,7 @@ int dbShareTableLock(const Dictionary *tablesToLock) {
       }
       
       // Table isn't locked by any other thread.  Mark it locked by this one.
-      if (!dictionaryAddEntry(&database->lockedTables,
+      if (!dictionaryAddEntry(database->lockedTables,
         str(cur->key), &threadId, typeU64)
       ) {
         printLog(ERR, "Cannot add table %s to lockedTables hash table.\n",
@@ -4305,7 +4306,7 @@ int dbShareTableLock(const Dictionary *tablesToLock) {
   // Initialize the originalLock value for this lock.
   bool originalLock = true;
   DictionaryEntry *entry = 
-    dictionaryAddEntry(&tableLock, "@originalLock", &originalLock, typeBool);
+    dictionaryAddEntry(tableLock, "@originalLock", &originalLock, typeBool);
   if (entry == NULL) {
     // Memory allocation failure.  Bail.
     LOG_MALLOC_FAILURE();
@@ -4319,7 +4320,7 @@ int dbShareTableLock(const Dictionary *tablesToLock) {
   }
   // Initialize the databasea value for this lock.
   entry
-    = dictionaryAddEntry(&tableLock, "@database", database, typePointerNoCopy);
+    = dictionaryAddEntry(tableLock, "@database", database, typePointerNoCopy);
   if (entry == NULL) {
     // Memory allocation failure.  Bail.
     LOG_MALLOC_FAILURE();

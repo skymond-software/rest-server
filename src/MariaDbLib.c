@@ -1030,7 +1030,7 @@ Socket* getDbClientSocket(MariaDb *database) {
     } else {
       printLog(DEBUG, "No socketMetadata for socket.  Creating.\n");
       socketMetadata = (SocketMetadata*) calloc(1, sizeof(SocketMetadata));
-      dictionaryAddEntry(&database->socketMetadata, dbClientSocket,
+      dictionaryAddEntry(database->socketMetadata, dbClientSocket,
         socketMetadata, typePointer);
       socketMetadata->previousThread = thrd_current();
     }

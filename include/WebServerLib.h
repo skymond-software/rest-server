@@ -104,6 +104,7 @@ typedef struct WsNamespace {
 typedef int (*WsCookiesHandler)(Dictionary *cookiesDict);
 typedef int (*WsRequestObjectHandler)(WsRequestObject *inputParameters);
 typedef Bytes (*WsSerializeToXml)(const char *methodName, WsResponseObject *kvList, const char *commandType);
+typedef WsRequestObject* (*WsRequestObjectCreate)(TypeDescriptor*);
 typedef WsRequestObject* (*WsDeserializeFromXml)(const char*);
 typedef Bytes (*WsSerializeToJson)(WsResponseObject *responseObject);
 typedef WsRequestObject* (*WsDeserializeFromJson)(const char *jsonText, long long int *position);
@@ -113,7 +114,7 @@ typedef void* (*WsGetRequestValue)(const WsRequestObject *inputParameters, const
 typedef void* (*WsGetResponseValue)(const WsResponseObject *inputParameters, const volatile void *key);
 typedef void (*WsRegisterThread)(void);
 typedef void (*WsUnregisterThread)(void *arg);
-typedef WsRequestNode* (*WsAddRequestValue)(WsRequestObject **response,
+typedef WsRequestNode* (*WsAddRequestValue)(WsRequestObject *response,
   const char *key, const volatile void *value, TypeDescriptor *type, ...);
 typedef WsResponseNode* (*WsAddResponseValue)(WsResponseObject **response,
   const char *key, const volatile void *value, TypeDescriptor *type, ...);
@@ -138,6 +139,7 @@ typedef char* (*WsResponseObjectToString)(const WsResponseObject*);
 /// @param deserializeFromXml A WsDeserializeFromXml function pointer to call to
 ///   convert the XML body of an HTTP request into a WsRequestObject that can be
 ///   passed to a web service function.
+/// @param wsRequestObjectCreate The constructor to use for a WsRequestObject.
 /// @param serializeToJson A WsSerializeToXml function pointer to call to convert a
 ///   WsResponseObject returned by the web service function into an JSON string
 ///   that can be sent over HTTP.
@@ -178,6 +180,7 @@ typedef struct WebService {
   WsRequestObjectHandler    requestObjectHandler;
   WsSerializeToXml          serializeToXml;
   WsDeserializeFromXml      deserializeFromXml;
+  WsRequestObjectCreate     wsRequestObjectCreate;
   WsSerializeToJson         serializeToJson;
   WsDeserializeFromJson     deserializeFromJson;
   WsRequestObjectDestroy    requestObjectDestroy;
