@@ -1638,7 +1638,7 @@ int wsConnectionThread(void *args) {
   return returnValue;
 }
 
-/// @fn int wsInit(int portNumber, List *webServices)
+/// @fn int wsInit(void *args)
 ///
 /// @brief Initialize the web server and poll for incoming requests.
 ///
