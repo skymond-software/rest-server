@@ -1562,17 +1562,17 @@ bool sqlDeleteRecordsLikeVargs(void *db,
     bytesAddStr(&query, " where ");
   }
   while (fieldArg != NULL) {
+    if (!dbIsFieldNameValid(fieldArg)) {
+      query = bytesDestroy(query);
+      printLog(ERR, "Invalid characters in argument \"%s\".\n", fieldArg);
+      printLog(TRACE, "EXIT sqlDeleteRecordsLikeVargs() = {false)\n");
+      return false; // Empty result
+    }
     bytesAddStr(&query, fieldArg);
     bytesAddStr(&query, " like ");
     fieldArg = va_arg(args, char*);
     if (fieldArg != NULL) {
       printLog(DEBUG, "Adding \"%s\"\n", fieldArg);
-      if (!dbIsFieldNameValid(fieldArg)) {
-        query = bytesDestroy(query);
-        printLog(ERR, "Invalid characters in argument \"%s\".\n", fieldArg);
-        printLog(TRACE, "EXIT sqlDeleteRecordsLikeVargs() = {false)\n");
-        return false; // Empty result
-      }
       // Convert instances of '*' wildcard character to SQL's '%' wildcard.
       Bytes stringLiteral = database->makeStringLiteral(fieldArg);
       Bytes escapedArg = bytesReplaceStr(stringLiteral, "\\*", "%");
@@ -2842,7 +2842,7 @@ i64 sqlGetNumRecords(void *db, const char *dbString, const char *tableName) {
   printLog(DEBUG, "Sending query \"%s\".\n", str(query));
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  i64 returnValue = 0;
+  i64 returnValue = -1;
   if ((queryResult != NULL) && (queryResult->numResults > 0)) {
     TypeDescriptor *type = queryResult->fieldTypes[0];
     void *value = dbGetResultByIndex(queryResult, 0, 0, type);

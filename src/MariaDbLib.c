@@ -449,7 +449,7 @@ Socket *destroyDbClientSocket(Socket *dbClientSocket) {
         tss_set(_threadClientSocket, NULL);
         return NULL;
       }
-      dictionaryRemoveEntry(database->socketMetadata, dbClientSocket);
+      dictionaryRemove(database->socketMetadata, dbClientSocket);
     }
     dbClientSocket = socketDestroy(dbClientSocket);
     tss_set(_threadClientSocket, NULL);
@@ -746,7 +746,6 @@ Database* mariaDbInit_(const char *ignored,
     return NULL;
   }
   
-  
   // SqlDatabase-level object.
   SqlDatabase *sqlDatabase = (SqlDatabase*) malloc(sizeof(SqlDatabase));
   if (sqlDatabase == NULL) {
@@ -936,15 +935,6 @@ Socket* getDbClientSocket(MariaDb *database) {
       llu(database->availableDbSockets->size));
     if (database != NULL) {
       dbClientSocket = (Socket*) queuePop(database->availableDbSockets);
-      thrd_t threadId = thrd_current();
-      if (!htGetValue(_inUseMariaDbObjects, &threadId)) {
-        htAddEntry(_inUseMariaDbObjects,
-          &threadId, database, typePointerNoCopy);
-      } else {
-        htRemoveEntry(_inUseMariaDbObjects, &threadId);
-        htAddEntry(_inUseMariaDbObjects,
-          &threadId, database, typePointerNoCopy);
-      }
     }
     
     if (dbClientSocket != NULL) {
@@ -1034,6 +1024,12 @@ Socket* getDbClientSocket(MariaDb *database) {
         socketMetadata, typePointer);
       socketMetadata->previousThread = thrd_current();
     }
+    
+    // Set this thread's database.
+    thrd_t threadId = thrd_current();
+    htRemoveEntry(_inUseMariaDbObjects, &threadId);
+    htAddEntry(_inUseMariaDbObjects,
+      &threadId, database, typePointerNoCopy);
   }
   
   return dbClientSocket;
@@ -4109,7 +4105,7 @@ bool mariaDbStartTransaction(void *db) {
 ///
 /// @return Returns NULL on success, the original unmodified sqlDatabase pointer
 /// on failure.
-void * mariaDbDisconnect(void *db) {
+void* mariaDbDisconnect(void *db) {
   SqlDatabase *sqlDatabase = (SqlDatabase*) db;
   
   printLog(TRACE, "ENTER mariaDbDisconnect(sqlDatabase=%p)\n", sqlDatabase);
@@ -4135,12 +4131,18 @@ void * mariaDbDisconnect(void *db) {
       // Disconnect all the sockets.
       Queue *socketQueue = mariaDb->availableDbSockets;
       mtx_lock(_inUseMariaDbObjects->lock);
-      for (HashNode *cur = _inUseMariaDbObjects->head; cur != NULL;) {
-        void *key = cur->key;
-        void *value = (void*) cur->value;
-        cur = cur->next;
-        if (value == socketQueue) {
-          htRemoveEntry(_inUseMariaDbObjects, key);
+      bool found = true;
+      while (found == true) {
+        found = false;
+        for (HashNode *cur = _inUseMariaDbObjects->head;
+          cur != _inUseMariaDbObjects->tail;
+          cur = cur->next
+        ) {
+          if (cur->value == mariaDb) {
+            found = true;
+            htRemoveEntry(_inUseMariaDbObjects, cur->key);
+            break;
+          }
         }
       }
       mtx_unlock(_inUseMariaDbObjects->lock);

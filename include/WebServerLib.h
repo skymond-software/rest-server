@@ -104,7 +104,7 @@ typedef struct WsNamespace {
 typedef int (*WsCookiesHandler)(Dictionary *cookiesDict);
 typedef int (*WsRequestObjectHandler)(WsRequestObject *inputParameters);
 typedef Bytes (*WsSerializeToXml)(const char *methodName, WsResponseObject *kvList, const char *commandType);
-typedef WsRequestObject* (*WsRequestObjectCreate)(TypeDescriptor*);
+typedef WsRequestObject* (*WsRequestObjectCreate)(TypeDescriptor *type, bool disableThreadSafety, ...);
 typedef WsRequestObject* (*WsDeserializeFromXml)(const char*);
 typedef Bytes (*WsSerializeToJson)(WsResponseObject *responseObject);
 typedef WsRequestObject* (*WsDeserializeFromJson)(const char *jsonText, long long int *position);
@@ -115,7 +115,8 @@ typedef void* (*WsGetResponseValue)(const WsResponseObject *inputParameters, con
 typedef void (*WsRegisterThread)(void);
 typedef void (*WsUnregisterThread)(void *arg);
 typedef WsRequestNode* (*WsAddRequestValue)(WsRequestObject *response,
-  const char *key, const volatile void *value, TypeDescriptor *type, ...);
+  const volatile void *key, const volatile void *value,
+  TypeDescriptor *type, ...);
 typedef WsResponseNode* (*WsAddResponseValue)(WsResponseObject **response,
   const char *key, const volatile void *value, TypeDescriptor *type, ...);
 typedef int (*WsRemoveResponseValue)(WsResponseObject *response, const volatile void *key);
@@ -180,7 +181,9 @@ typedef struct WebService {
   WsRequestObjectHandler    requestObjectHandler;
   WsSerializeToXml          serializeToXml;
   WsDeserializeFromXml      deserializeFromXml;
-  WsRequestObjectCreate     wsRequestObjectCreate;
+  WsRequestObjectCreate     _wsRequestObjectCreate;
+  #define wsRequestObjectCreate(keyType, ...) \
+    _wsRequestObjectCreate(keyType, ##__VA_ARGS__, 0)
   WsSerializeToJson         serializeToJson;
   WsDeserializeFromJson     deserializeFromJson;
   WsRequestObjectDestroy    requestObjectDestroy;

@@ -2940,20 +2940,20 @@ WebService unitTestWebService = {
   NULL,                                    // cookiesHandler
   NULL,                                    // requestObjectHandler
   wcSerialize,                             // serializeToXml
-  xmlToDictionary,                         // deserializeFromXml
-  dictionaryCreate,                        // wsRequestObjectCreate
+  xmlToRedBlackTree,                       // deserializeFromXml
+  rbTreeCreate_,                           // wsRequestObjectCreate
   (WsSerializeToJson) listToJson,          // serializeToJson
-  jsonToDictionary,                        // deserializeFromJson
-  dictionaryDestroy,                       // requestObjectDestroy
+  jsonToRedBlackTree,                      // deserializeFromJson
+  rbTreeDestroy,                           // requestObjectDestroy
   rbTreeDestroy,                           // responseObjectDestroy
   rbTreeGetValue,                          // getRequestValue
   rbTreeGetValue,                          // getResponseValue
   NULL,                                    // registerThread
   NULL,                                    // unregisterThread
-  (WsAddRequestValue) dictionaryAddEntry_, // addRequestValue_
+  rbTreeAddEntry_,                         // addRequestValue_
   wcAddResponseValue_,                     // addResponseValue_
   rbTreeRemove,                            // removeResponseValue
-  dictionaryToString,                      // requestObjectToString
+  (WsRequestObjectToString) listToString,  // requestObjectToString
   (WsResponseObjectToString) listToString, // responseObjectToString
   NULL,                                    // context
 };

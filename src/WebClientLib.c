@@ -307,7 +307,7 @@ WsResponseNode* wcAddResponseValue_(WsResponseObject **response,
     }
   }
   
-  WsResponseNode *returnValue = rbInsert(*response, key, value, type);
+  WsResponseNode *returnValue = rbTreeAddEntry(*response, key, value, type);
   if (returnValue == NULL) {
     printLog(ERR, "Could not add entry into red black tree.\n");
     printLog(TRACE,

@@ -489,6 +489,7 @@ bool dbEnsureFieldIndexed_(Database *database,
 #define dbEnsureFieldIndexed(database, dbName, tableName, fieldName, ...) \
   dbEnsureFieldIndexed_(database, dbName, tableName, fieldName, \
     ##__VA_ARGS__, NULL)
+DbResult* dbGetDatabaseNames(Database *database);
 
 
 #ifdef __cplusplus

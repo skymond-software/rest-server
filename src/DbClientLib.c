@@ -249,10 +249,20 @@ DbResult* dbGetRecords_(Database *database,
     "ENTER dbGetRecords_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "orderBy=\"%s\")\n",
     database, dbName, tableName, (orderBy != NULL) ? orderBy : "");
+  DbResult *returnValue = NULL;
+  
+  if (database == NULL) {
+    printLog(ERR, "NULL database parameter provided.\n");
+    printLog(TRACE,
+      "EXIT dbGetRecords_(database=%p, dbName=\"%s\", tableName=\"%s\", "
+      "orderBy=\"%s\") = {0 results}\n",
+      database, dbName, tableName, (orderBy != NULL) ? orderBy : "");
+    return returnValue; // NULL
+  }
   
   va_list args;
   va_start(args, orderBy);
-  DbResult *returnValue = database->getValuesVargs(database->db, dbName,
+  returnValue = database->getValuesVargs(database->db, dbName,
     tableName, "*", orderBy, args);
   va_end(args);
   dbFinalizeResult(returnValue, database, dbName, tableName);
@@ -629,7 +639,7 @@ bool dbDeleteRecords_(Database *database, const char *dbName, const char *tableN
 
 /// @fn Bytes** dbResultToBytesTable(DbResult *dbResult)
 ///
-/// @brief Construct a byts table from a DbResult.
+/// @brief Construct a bytes table from a DbResult.
 ///
 /// @param dbResult is the DbResult instance to convert.
 ///
@@ -1882,7 +1892,7 @@ bool dbIsFieldNameValid(const char *name) {
     char c = '\0';
     for (; *name != '\0'; name++) {
       c = *name;
-      if ((c <= 32) || (c >= 127)) {
+      if ((!isalnum(c)) && (c != '_')) {
         returnValue = false;
         break;
       }
@@ -4447,7 +4457,7 @@ DbResult* dbResultGetRange(
 /// @brief Ensure there is an index for a particular field in a database table.
 ///
 /// @param database A pointer to the Database object representing the database
-///   system used to generate dbResult.
+///   system.
 /// @param dbName The name of the database that the table is in.
 /// @param tableName The name of the table the field is in.
 /// @param fieldName The name of the field to make sure is indexed.
@@ -4474,6 +4484,25 @@ bool dbEnsureFieldIndexed_(Database *database,
   
   SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
     database, dbName, tableName, fieldName, boolNames[returnValue]);
+  return returnValue;
+}
+
+/// @fn DbResult* dbGetDatabaseNames(Database *database)
+///
+/// @brief Get the names of the individual databases that are members of a
+/// database management system.
+///
+/// @param database A pointer to the Database object representing the database
+///   system.
+///
+/// @return Returns a pointer to a DbResult that contains the names of the
+/// member databases on success, NULL on failure.
+DbResult* dbGetDatabaseNames(Database *database) {
+  SCOPE_ENTER("database=%p", database);
+  
+  DbResult *returnValue = database->getDatabaseNames(database->db);
+  
+  SCOPE_EXIT("database=%p", "%p", database, returnValue);
   return returnValue;
 }
 
