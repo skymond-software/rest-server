@@ -1,6 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @author            Generated Unit Test
 /// @date              06.15.2025
 ///
 /// @file              DbInterfaceUnitTest.c
@@ -10,9 +9,6 @@
 /// @details           Comprehensive test suite that exercises all functions
 ///                    in the DbInterface.h header including edge cases and
 ///                    NULL parameter handling.
-///
-/// @copyright
-///                    Copyright (c) 2025 Test Suite
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -54,7 +50,7 @@ bool testTransactionOperations(void);
 bool testLockingOperations(void);
 bool testUtilityFunctions(void);
 bool testDatabaseNullParameterHandling(void);
-bool testCornerCases(void);
+bool testDbInterfaceCornerCases(void);
 bool testDbResult(void);
 DbResult* createMockDbResult(void);
 Dictionary* createTestDictionary(void);
@@ -120,7 +116,7 @@ bool dbInterfaceUnitTest(void) {
     return false;
   }
   
-  if (!testCornerCases()) {
+  if (!testDbInterfaceCornerCases()) {
     printLog(ERR, "Corner cases test failed\n");
     return false;
   }
@@ -937,7 +933,7 @@ bool testDatabaseNullParameterHandling(void) {
 ///
 /// @return true if all tests pass, false otherwise
 ///
-bool testCornerCases(void) {
+bool testDbInterfaceCornerCases(void) {
   printLog(DEBUG, "Testing corner cases\n");
   
   // Test with empty strings
