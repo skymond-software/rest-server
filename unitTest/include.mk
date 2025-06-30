@@ -2,6 +2,7 @@ FLAGS := -g $(EXTRA_FLAGS) $(COMMAND_LINE_FLAGS)
 
 OBJ_FILES := \
     $(OBJ_DIR)/DbInterfaceUnitTest.o \
+    $(OBJ_DIR)/WebServerUnitTest.o \
 
 INCLUDES := \
     -I../lib/cnext/include \
