@@ -285,7 +285,6 @@ WebServer* webServerCreate(const char *interfacePath, int portNumber,
 );
 WebServer* webServerDestroy(WebServer *webServer);
 const char *getMimeType(const char *fileExtension);
-bool webServerUnitTest();
 
 
 #ifdef __cplusplus
