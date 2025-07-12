@@ -1879,13 +1879,13 @@ char *mariaDbGetStatistics(MariaDb *database) {
 
 #define FREE_PARTIAL_RESULT() \
   do { \
-    for (u64 j = 0; j < returnValue->numFields; j++) { \
+    for (u64 j = 0; j < dbGetNumFields(returnValue); j++) { \
       returnValue->rows[0][j] \
         = (void*) bytesDestroy((Bytes) returnValue->rows[0][j]); \
     } \
     returnValue->rows[0] = (void**) pointerDestroy(returnValue->rows[0]); \
-    for (u64 i = 1; i < returnValue->numRows; i++) { \
-      for (u64 j = 0; j < returnValue->numFields; j++) { \
+    for (u64 i = 1; i < dbGetNumRows(returnValue); i++) { \
+      for (u64 j = 0; j < dbGetNumFields(returnValue); j++) { \
         void* (*destructor)(volatile void*) \
           = returnValue->fieldTypes[j]->destroy; \
         if (returnValue->fieldTypes[j] == typeString) { \
@@ -2653,7 +2653,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
   headerType = response[responseIndex];
   while ((headerType != 0xfe) && (responseIndex < bytesReceived)) {
     void *check = realloc(returnValue->rows,
-      (returnValue->numRows + 1) * sizeof(void**));
+      (dbGetNumRows(returnValue) + 1) * sizeof(void**));
     if (check == NULL) {
       // Memory allocation failed.  Failure.
       // Cannot use printLog here.
@@ -2670,7 +2670,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
       releaseDbClientSocket(database, dbClientSocket);
       return returnValue; // succesful is false
     }
-    returnValue->rows[returnValue->numRows] = (void**) check;
+    returnValue->rows[dbGetNumRows(returnValue)] = (void**) check;
     while ((responseIndex >= bytesReceived)
       && (tss_get(_threadClientSocket) != NULL)
     ) {
@@ -2687,7 +2687,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
       MariaDbGetValue valueGetter
         = getterFromType(returnValue->fieldTypes[columnIndex]);
       printLog(FLOOD, "Getting field %s of row %llu.\n",
-        str(returnValue->rows[0][columnIndex]), llu(returnValue->numRows));
+        str(returnValue->rows[0][columnIndex]), llu(dbGetNumRows(returnValue)));
       check = valueGetter(
         (unsigned char**) &response, &responseIndex, &bytesReceived);
       
@@ -2706,24 +2706,24 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
           mtx_unlock(&database->lock);
           // Failure in lower-level function.  Can't use FREE_PARTIAL_RESULT()
           // until we've freed the partial row we've populated.
-          if (returnValue->numRows > 0) {
+          if (dbGetNumRows(returnValue) > 0) {
             for (u64 j = 0; j < columnIndex; j++) {
               void* (*destructor)(volatile void*)
                 = returnValue->fieldTypes[columnIndex]->destroy;
               if (returnValue->fieldTypes[columnIndex] == typeString) {
                 destructor = (void* (*)(volatile void*)) bytesDestroy;
               }
-              returnValue->rows[returnValue->numRows][j]
-                = destructor(returnValue->rows[returnValue->numRows][j]);
+              returnValue->rows[dbGetNumRows(returnValue)][j]
+                = destructor(returnValue->rows[dbGetNumRows(returnValue)][j]);
             }
           } else {
             for (u64 j = 0; j < columnIndex; j++) {
-              returnValue->rows[returnValue->numRows][j]
-                = (void*) bytesDestroy((Bytes)returnValue->rows[returnValue->numRows][j]);
+              returnValue->rows[dbGetNumRows(returnValue)][j]
+                = (void*) bytesDestroy((Bytes)returnValue->rows[dbGetNumRows(returnValue)][j]);
             }
           }
-          returnValue->rows[returnValue->numRows]
-            = (void**) pointerDestroy(returnValue->rows[returnValue->numRows]);
+          returnValue->rows[dbGetNumRows(returnValue)]
+            = (void**) pointerDestroy(returnValue->rows[dbGetNumRows(returnValue)]);
           FREE_PARTIAL_RESULT();
           return returnValue; // succesful is false
         } else if ((fieldType == typeString) || (fieldType == typeBytes)) {
@@ -2742,7 +2742,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
           llu(bytesLength((Bytes) check)));
         printBinary(FLOOD, check, bytesLength((Bytes) check));
       }
-      returnValue->rows[returnValue->numRows][columnIndex] = (void*) check;
+      returnValue->rows[dbGetNumRows(returnValue)][columnIndex] = (void*) check;
     }
     returnValue->numRows++;
     
@@ -2828,13 +2828,13 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
   response = (unsigned char*) pointerDestroy(response);
   // Add in a last NULL row
   void *check = realloc(returnValue->rows,
-    (returnValue->numRows + 1) * sizeof(void**));
+    (dbGetNumRows(returnValue) + 1) * sizeof(void**));
   if (check == NULL) {
     // Memory allocation failed.  Failure.
     // Cannot use printLog here.
     // Free the partial result.
-    for (u64 i = 0; i < returnValue->numRows; i++) {
-      for (u64 j = 0; j < returnValue->numFields; j++) {
+    for (u64 i = 0; i < dbGetNumRows(returnValue); i++) {
+      for (u64 j = 0; j < dbGetNumFields(returnValue); j++) {
         returnValue->rows[i][j]
           = (void*) bytesDestroy((Bytes) returnValue->rows[i][j]);
       }
@@ -2847,17 +2847,17 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
     return returnValue; // succesful is false
   }
   returnValue->rows = (void ***) check;
-  returnValue->rows[returnValue->numRows] = NULL;
+  returnValue->rows[dbGetNumRows(returnValue)] = NULL;
   returnValue->successful = true;
-  if (returnValue->numRows > 0) {
-    returnValue->numResults = returnValue->numRows - 1;
-  } // else returnValue->numRows remains 0
+  if (dbGetNumRows(returnValue) > 0) {
+    returnValue->numResults = dbGetNumRows(returnValue) - 1;
+  } // else dbGetNumRows(returnValue) remains 0
   
   printLog(DEBUG, "Query time: %llu microseconds\n",
     llu(getElapsedMicroseconds(queryStartTime)));
   
   printLog(TRACE, "EXIT _mariaDbExecQuery(query=%p) = {%llu results}\n", query,
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   releaseDbClientSocket(database, dbClientSocket);
   return returnValue;
 }
@@ -2881,7 +2881,7 @@ DbResult* mariaDbExecQueryBytes(void *connection, const Bytes query) {
   call_once(&_mariaDbThreadSetup, setupMariaDbThreadMetadata);
   
   DbResult *queryResult = _mariaDbExecQuery(database, query);
-  if (queryResult->successful == false) {
+  if (dbQuerySuccessful(queryResult) == false) {
     // It's possible the connection was broken.  If so, it will reset on the
     // second attempt.  Try once more.
     queryResult = dbFreeResult(queryResult);
@@ -2889,7 +2889,7 @@ DbResult* mariaDbExecQueryBytes(void *connection, const Bytes query) {
   }
   
   printLog(TRACE, "EXIT mariaDbExecQueryBytes(query=%p) = {successful = %s}\n", query,
-    (queryResult->successful == true) ? "true" : "false");
+    (dbQuerySuccessful(queryResult) == true) ? "true" : "false");
   return queryResult;
 }
 
@@ -2917,7 +2917,7 @@ DbResult* mariaDbExecQueryString(void *connection, const char *queryString) {
   
   printLog(TRACE,
     "EXIT mariaDbExecQueryString(queryString=\"%s\") = {successful = %s}\n",
-    queryString, (queryResult->successful == true) ? "true" : "false");
+    queryString, (dbQuerySuccessful(queryResult) == true) ? "true" : "false");
   return queryResult;
 }
 
@@ -3799,7 +3799,7 @@ DbResult* mariaDbGetDatabaseNames(void *db) {
   
   printLog(TRACE,
     "EXIT mariaDbGetDatabaseNames(database=%p) = {%s}\n",
-    database, (queryResult->successful) ? "successful" : "NOT successful");
+    database, (dbQuerySuccessful(queryResult)) ? "successful" : "NOT successful");
   return queryResult;
 }
 
@@ -3843,7 +3843,7 @@ DbResult* mariaDbGetTableNames(void *db, const char *dbString) {
   bytesAddStr(&query, ";");
   queryResult = mariaDbExecQueryBytes(database->connection, query);
   query = bytesDestroy(query);
-  if (queryResult->successful == false) {
+  if (dbQuerySuccessful(queryResult) == false) {
     printLog(TRACE,
       "EXIT mariaDbGetTableNames(database=%p, dbName=\"%s\") "
       "= {could not set database}\n",
@@ -3865,7 +3865,7 @@ DbResult* mariaDbGetTableNames(void *db, const char *dbString) {
   
   printLog(TRACE,
     "EXIT mariaDbGetTableNames(database=%p, dbName=\"%s\") = {%llu results}\n",
-    database, dbName, llu(returnValue->numRows));
+    database, dbName, llu(dbGetNumRows(returnValue)));
   dbName = stringDestroy(dbName);
   return returnValue;
 }
@@ -3899,7 +3899,7 @@ bool mariaDbAddDatabase(void *db, const char *dbName) {
   }
   queryResult = mariaDbExecQueryString(database->connection, query);
   query = stringDestroy(query);
-  bool returnValue = queryResult->successful;
+  bool returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -3937,7 +3937,7 @@ bool mariaDbDeleteDatabase(void *db, const char *dbName) {
   }
   queryResult = mariaDbExecQueryString(database->connection, query);
   query = stringDestroy(query);
-  bool returnValue = queryResult->successful;
+  bool returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -4075,7 +4075,7 @@ bool mariaDbStartTransaction(void *db) {
     tss_set(mariaDb->transactionInProgress, VOID_POINTER_TRUE);
     DbResult *queryResult
       = database->stringQuery(database->connection, "start transaction;");
-    querySuccessful = queryResult->successful;
+    querySuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
     if (querySuccessful) {
       tssInc(mariaDb->transactionCount);
@@ -4272,7 +4272,7 @@ DbResult* mariaDbDescribeTable(void *connection, const char *dbString,
     LOG_MALLOC_FAILURE();
     exit(1);
   }
-  if (queryResult->successful == true) {
+  if (dbQuerySuccessful(queryResult) == true) {
     returnValue->successful = true;
     
     returnValue->numFields = 3;
@@ -4282,20 +4282,20 @@ DbResult* mariaDbDescribeTable(void *connection, const char *dbString,
     returnValue->fieldTypes[1] = typeBytes;
     returnValue->fieldTypes[2] = typeBytes;
     
-    returnValue->numRows = queryResult->numRows;
-    returnValue->numResults = queryResult->numResults;
+    returnValue->numRows = dbGetNumRows(queryResult);
+    returnValue->numResults = dbGetNumResults(queryResult);
     returnValue->rows
-      = (void***) calloc(1, (returnValue->numRows + 1) * sizeof(void**));
+      = (void***) calloc(1, (dbGetNumRows(returnValue) + 1) * sizeof(void**));
     
     returnValue->rows[0]
-      = (void**) calloc(1, returnValue->numFields * sizeof(void*));
+      = (void**) calloc(1, dbGetNumFields(returnValue) * sizeof(void*));
     bytesAddStr((Bytes*) &returnValue->rows[0][0], "fieldName");
     bytesAddStr((Bytes*) &returnValue->rows[0][1], "typeInfo");
     bytesAddStr((Bytes*) &returnValue->rows[0][2], "primaryKey");
     
-    for (u64 row = 1; row < returnValue->numRows; row++) {
+    for (u64 row = 1; row < dbGetNumRows(returnValue); row++) {
       returnValue->rows[row]
-        = (void**) calloc(1, returnValue->numFields * sizeof(void*));
+        = (void**) calloc(1, dbGetNumFields(returnValue) * sizeof(void*));
       bytesAddBytes((Bytes*) &returnValue->rows[row][0],
         dbGetBytesByName(queryResult, row - 1, "Field"));
       bytesAddBytes((Bytes*) &returnValue->rows[row][1],
@@ -4314,7 +4314,7 @@ DbResult* mariaDbDescribeTable(void *connection, const char *dbString,
   printLog(TRACE,
     "EXIT mariaDbDescribeTable(database=%p, dbString=%s, tableName=%s) = {%s}\n",
     database, dbString, tableName,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -4405,7 +4405,7 @@ bool mariaDbChangeFieldType(void *db, const char *dbString,
     typeName = stringDestroy(typeName);
   }
   DbResult *queryResult = database->bytesQuery(database->connection, query);
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   query = bytesDestroy(query);
   
@@ -4446,7 +4446,7 @@ i64 mariaDbGetSize(void *db, const char *dbName) {
   SqlDatabase *database = (SqlDatabase*) db;
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   scopeAdd(queryResult, dbFreeResult);
-  if (queryResult->successful == true) {
+  if (dbQuerySuccessful(queryResult) == true) {
     const char *dbSize = dbGetStringByName(queryResult, 0, "Size");
     if (dbSize != NULL) {
       returnValue = (i64) strtoll(dbSize, NULL, 10);
@@ -4510,7 +4510,7 @@ bool mariaDbRenameDatabase(void *db,
   }
   scopeAdd(existingDatabases, dbFreeResult);
   // returnValue is currently false.
-  for (u64 ii = 0; ii < existingDatabases->numResults; ii++) {
+  for (u64 ii = 0; ii < dbGetNumResults(existingDatabases); ii++) {
     if (strcmpci(oldDbNameWithInstance,
       dbGetStringByIndex(existingDatabases, ii, 0)) == 0
     ) {
@@ -4525,7 +4525,7 @@ bool mariaDbRenameDatabase(void *db,
     return returnValue;
   }
   // returnValue is currently true.
-  for (u64 ii = 0; ii < existingDatabases->numResults; ii++) {
+  for (u64 ii = 0; ii < dbGetNumResults(existingDatabases); ii++) {
     if (strcmpci(newDbNameWithInstance,
       dbGetStringByIndex(existingDatabases, ii, 0)) == 0
     ) {
@@ -4569,13 +4569,13 @@ bool mariaDbRenameDatabase(void *db,
   Bytes query = NULL;
   DbResult *queryResult = NULL;
   bool successful = false;
-  for (u64 ii = 0; ii < oldTables->numResults; ii++) {
+  for (u64 ii = 0; ii < dbGetNumResults(oldTables); ii++) {
     tableName = dbGetStringByIndex(oldTables, ii, 0);
     abprintf(&query, "RENAME TABLE %s.%s TO %s.%s;",
       oldDbNameWithInstance, tableName, newDbNameWithInstance, tableName);
     queryResult = database->bytesQuery(database->connection, query);
     query = bytesDestroy(query);
-    successful = queryResult->successful;
+    successful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
     if (successful == false) {
       returnValue = false;
@@ -4589,7 +4589,7 @@ bool mariaDbRenameDatabase(void *db,
           newDbNameWithInstance, tableName, oldDbNameWithInstance, tableName);
         queryResult = database->bytesQuery(database->connection, query);
         query = bytesDestroy(query);
-        successful = queryResult->successful;
+        successful = dbQuerySuccessful(queryResult);
         queryResult = dbFreeResult(queryResult);
         if (successful == false) {
           printLog(ERR, "Could not rename %s.%s back to %s.%s.\n",
@@ -4661,7 +4661,7 @@ bool mariaDbCommitTransaction(void *db) {
   tssDec(mariaDb->transactionCount);
   if (tssEqual(mariaDb->transactionCount, 0)) {
     DbResult *queryResult = database->stringQuery(database->connection, "commit;");
-    querySuccessful = queryResult->successful;
+    querySuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
     
     Socket *dbClientSocket = (Socket*) tss_get(_threadClientSocket);
@@ -4714,7 +4714,7 @@ bool mariaDbRollbackTransaction(void *db) {
   tssDec(mariaDb->transactionCount);
   if (tssEqual(mariaDb->transactionCount, 0)) {
     DbResult *queryResult = database->stringQuery(database->connection, "rollback;");
-    querySuccessful = queryResult->successful;
+    querySuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
     
     Socket *dbClientSocket = (Socket*) tss_get(_threadClientSocket);
@@ -4768,7 +4768,7 @@ bool mariaDbLockTablesDict(void *db, const Dictionary *tablesToLock) {
     tss_set(mariaDb->tablesLocked, VOID_POINTER_TRUE);
     DbResult *queryResult
       = database->stringQuery(database->connection, "start transaction;");
-    querySuccessful = queryResult->successful;
+    querySuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
     if (querySuccessful) {
       tssInc(mariaDb->transactionCount);
@@ -4841,7 +4841,7 @@ bool mariaDbUnlockTables(void *db, const Dictionary *tableLock) {
   tssDec(mariaDb->transactionCount);
   if (tssEqual(mariaDb->transactionCount, 0)) {
     DbResult *queryResult = database->stringQuery(database->connection, "commit;");
-    querySuccessful = queryResult->successful;
+    querySuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
     
     Socket *dbClientSocket = (Socket*) tss_get(_threadClientSocket);
@@ -4951,7 +4951,7 @@ bool mariaDbEnsureFieldIndexedVargs(void *database,
   
   DbResult *queryResult
     = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
-  querySuccessful = queryResult->successful;
+  querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
@@ -4983,7 +4983,7 @@ bool mariaDbAddRecords(void *database,
       "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
       "= {NOT successful}\n", database, dbName, tableName);
     return false;
-  } else if ((dbResult == NULL) || (dbResult->numResults == 0)) {
+  } else if ((dbResult == NULL) || (dbGetNumResults(dbResult) == 0)) {
     // Not an error, but nothing to do.
     printLog(TRACE,
       "EXIT mariaDbAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
@@ -5010,8 +5010,8 @@ bool mariaDbAddRecords(void *database,
   bytesAddStr(&query, tableName);
   bytesAddStr(&query, " values ");
   
-  u64 numResults = dbResult->numResults;
-  u64 numFields = dbResult->numFields;
+  u64 numResults = dbGetNumResults(dbResult);
+  u64 numFields = dbGetNumFields(dbResult);
   TypeDescriptor **fieldTypes = dbResult->fieldTypes;
   for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
     bytesAddStr(&query, "(");
@@ -5067,7 +5067,7 @@ bool mariaDbAddRecords(void *database,
   printLog(DEBUG, "Running query \"%s\"\n", str(query));
   queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   if (returnValue == false) {

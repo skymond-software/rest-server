@@ -79,8 +79,8 @@ void dbFinalizeResult(DbResult *dbResult, Database *database,
     "tableName=\"%s\")\n",
     dbResult, database, dbName, tableName);
   
-  if ((dbResult == NULL) || (dbResult->numRows == 0)
-    || (dbResult->numFields == 0)
+  if ((dbResult == NULL) || (dbGetNumRows(dbResult) == 0)
+    || (dbGetNumFields(dbResult) == 0)
   ) {
     // Cannot continue
     printLog(TRACE,
@@ -122,8 +122,8 @@ void dbFinalizeResult(DbResult *dbResult, Database *database,
   // numResults and numFields will always be >= 0, so this is the simplest
   // form that is guaranteed to always work with non-negative integers.
   
-  //// u64 numFields = dbResult->numFields;
-  //// u64 numResults = dbResult->numResults;
+  //// u64 numFields = dbGetNumFields(dbResult);
+  //// u64 numResults = dbGetNumResults(dbResult);
   //// u64 linearOperations = (numResults * numFields) + numResults;
   //// u64 hashOperations = 2 + (numResults << 2); // bit shift instead of multiply
   //// if (linearOperations <= hashOperations) {
@@ -198,7 +198,7 @@ DbResult* dbGetValues_(Database *database,
       "EXIT dbGetValues_(database=%p, dbName=\"%s\", tableName=\"%s\", "
       "select=\"%s\", orderBy=\"%s\") = {%llu results}\n",
       database, dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-      llu(returnValue->numResults));
+      llu(dbGetNumResults(returnValue)));
     return returnValue;
   }
   
@@ -213,7 +213,7 @@ DbResult* dbGetValues_(Database *database,
     "EXIT dbGetValues_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", orderBy=\"%s\") = {%llu results}\n",
     database, dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   return returnValue;
 }
 
@@ -271,7 +271,7 @@ DbResult* dbGetRecords_(Database *database,
     "EXIT dbGetRecords_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "orderBy=\"%s\") = {%llu results}\n",
     database, dbName, tableName, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   return returnValue;
 }
 
@@ -357,7 +357,7 @@ bool dbCheckExists(Database *database, const char *dbName) {
     DbResult *queryResult = database->getDatabaseNames(database->db);
     dbFinalizeResult(queryResult, database, NULL, NULL);
     
-    for (u64 i = 0; i < queryResult->numResults; i++) {
+    for (u64 i = 0; i < dbGetNumResults(queryResult); i++) {
       if (strcmpci(dbString, dbGetStringByIndex(queryResult, i, 0)) == 0) {
         returnValue = true;
         break;
@@ -403,7 +403,7 @@ bool dbCheckTableExists(Database *database,
     DbResult *tableNames = database->getTableNames(database->db, dbName);
     dbFinalizeResult(tableNames, database, NULL, NULL);
     
-    for (u64 i = 0; i < tableNames->numResults; i++) {
+    for (u64 i = 0; i < dbGetNumResults(tableNames); i++) {
       if (strcmpci(tableName, dbGetStringByIndex(tableNames, i, 0)) == 0) {
         returnValue = true;
         break;
@@ -451,8 +451,8 @@ bool dbCheckFieldExists(Database *database,
   
   if ((*dbName != '\0') && (*tableName != '\0')) {
     DbResult *tableDescription = dbDescribeTable(database, dbName, tableName);
-    if ((tableDescription != NULL) && (tableDescription->numResults > 0)) {
-      for (u64 ii = 0; ii < tableDescription->numResults; ii++) {
+    if ((tableDescription != NULL) && (dbGetNumResults(tableDescription) > 0)) {
+      for (u64 ii = 0; ii < dbGetNumResults(tableDescription); ii++) {
         if (strcmp(fieldName,
                    dbGetStringByName(tableDescription, ii, "fieldName")
           ) == 0
@@ -541,7 +541,7 @@ DbResult* dbFreeResult(DbResult *dbResult) {
   
   if (dbResult->rows != NULL) {
     // Header (row 0) is always an array of Bytes objects.
-    for (u64 j = 0; j < dbResult->numFields; j++) {
+    for (u64 j = 0; j < dbGetNumFields(dbResult); j++) {
       printLog(DEBUG, "Freeing dbResult[0][%llu]\n", llu(j));
       printLog(DEBUG, "dbResult[0][%llu] = \"%s\"\n", llu(j),
         (char*) dbResult->rows[0][j]);
@@ -550,8 +550,8 @@ DbResult* dbFreeResult(DbResult *dbResult) {
     dbResult->rows[0] = (void**) pointerDestroy(dbResult->rows[0]);
     i64 minStringTypeIndex = getIndexFromTypeDescriptor(typeString);
     i64 maxStringTypeIndex = getIndexFromTypeDescriptor(typeStringCiNoCopy);
-    for (u64 i = 1; i < dbResult->numRows; i++) {
-      for (u64 j = 0; j < dbResult->numFields; j++) {
+    for (u64 i = 1; i < dbGetNumRows(dbResult); i++) {
+      for (u64 j = 0; j < dbGetNumFields(dbResult); j++) {
         printLog(DEBUG, "Freeing dbResult[%llu][%llu]\n", llu(i), llu(j));
         if ((dbResult->fieldTypes[j] == typeString)
           || (dbResult->fieldTypes[j] == typeBytes)
@@ -649,14 +649,14 @@ bool dbDeleteRecords_(Database *database, const char *dbName, const char *tableN
 Bytes** dbResultToBytesTable(DbResult *dbResult) {
   printLog(TRACE, "ENTER dbResultToBytesTable())\n");
   
-  if ((dbResult == NULL) || (dbResult->numRows == 0)) {
+  if ((dbResult == NULL) || (dbGetNumRows(dbResult) == 0)) {
     // Nothing to do.
     printLog(TRACE, "EXIT dbResultToBytesTable() = {NULL})\n");
     return NULL;
   }
   
   Bytes **returnValue = (Bytes**) calloc(1,
-    (dbResult->numRows + 1) * sizeof(Bytes*));
+    (dbGetNumRows(dbResult) + 1) * sizeof(Bytes*));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
     printLog(NEVER, "EXIT dbResultToBytesTable() = {NULL})\n");
@@ -668,8 +668,8 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
   // which are Bytes objects.  Process those first since they don't adhere to
   // the types defined by the fieldTypes array.
   returnValue[0] = (Bytes*) calloc(1,
-    (dbResult->numFields + 1) * sizeof(Bytes));
-  for (u64 j = 0; j < dbResult->numFields; j++) {
+    (dbGetNumFields(dbResult) + 1) * sizeof(Bytes));
+  for (u64 j = 0; j < dbGetNumFields(dbResult); j++) {
     // returnValue[i][j] is set to NULL by calloc
     bytesAddBytes(&returnValue[0][j], (Bytes) dbResult->rows[0][j]);
     if (returnValue[0][j] == NULL) {
@@ -684,13 +684,13 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
     }
   }
   
-  for (u64 i = 1; i < dbResult->numRows; i++) {
+  for (u64 i = 1; i < dbGetNumRows(dbResult); i++) {
     returnValue[i] = (Bytes*) calloc(1,
-      (dbResult->numFields + 1) * sizeof(Bytes));
+      (dbGetNumFields(dbResult) + 1) * sizeof(Bytes));
     if (returnValue[i] == NULL) {
       LOG_MALLOC_FAILURE();
       for (u64 j = 0; j < i; j++) {
-        for (u64 k = 0; k < dbResult->numFields; k++) {
+        for (u64 k = 0; k < dbGetNumFields(dbResult); k++) {
           returnValue[j][k] = bytesDestroy(returnValue[j][k]);
         }
         returnValue[j] = (Bytes*) pointerDestroy(returnValue[j]);
@@ -699,7 +699,7 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
       printLog(NEVER, "EXIT dbResultToBytesTable() = {NULL})\n");
       return NULL;
     }
-    for (u64 j = 0; j < dbResult->numFields; j++) {
+    for (u64 j = 0; j < dbGetNumFields(dbResult); j++) {
       // returnValue[i][j] is set to NULL by calloc
       returnValue[i][j] = dbResult->fieldTypes[j]->toBytes(dbResult->rows[i][j]);
       if (returnValue[i][j] == NULL) {
@@ -708,7 +708,7 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
           returnValue[i][k] = bytesDestroy(returnValue[i][k]);
         }
         for (j = 0; j < i; j++) {
-          for (u64 k = 0; k < dbResult->numFields; k++) {
+          for (u64 k = 0; k < dbGetNumFields(dbResult); k++) {
             returnValue[j][k] = bytesDestroy(returnValue[j][k]);
           }
           returnValue[j] = (Bytes*) pointerDestroy(returnValue[j]);
@@ -718,9 +718,9 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
         return NULL;
       }
     }
-    // returnValue[i][dbResult->numFields] is set to NULL by calloc
+    // returnValue[i][dbGetNumFields(dbResult)] is set to NULL by calloc
   }
-  // returnValue[dbResult->numRows] is set to NULL by calloc
+  // returnValue[dbGetNumRows(dbResult)] is set to NULL by calloc
   
   printLog(TRACE, "EXIT dbResultToBytesTable() = {%p})\n", returnValue);
   return returnValue;
@@ -740,33 +740,64 @@ Bytes** dbResultToBytesTable(DbResult *dbResult) {
 ///
 /// @param dbResult The DbResult instance to get the table of.
 ///
-/// @return Returns a pointer to a newly-allocated, two-dimensional array of
-/// Bytes objects containing copies of the DbResult values on success, NULL on
-/// failure.
+/// @return Returns a pointer to the rows of the DbResult cast to a
+/// "const Bytes**" on success, NULL on failure.
 const Bytes** dbResultGetBytesTable(DbResult *dbResult) {
-  printLog(TRACE, "ENTER dbResultGetBytesTable())\n");
+  printLog(TRACE, "ENTER dbResultGetBytesTable()\n");
   
   const Bytes **returnValue = NULL;
   if (dbResult == NULL) {
     printLog(ERR, "Request to get Bytes table of NULL DbResult.\n");
+    printLog(TRACE, "EXIT dbResultGetBytesTable() = {%p}\n", returnValue);
     return returnValue; // NULL
   }
   
   TypeDescriptor **fieldTypes = dbResult->fieldTypes;
-  u64 numFields = dbResult->numFields;
+  u64 numFields = dbGetNumFields(dbResult);
   for (u64 fieldIndex = 0; fieldIndex < numFields; fieldIndex++) {
     if ((fieldTypes[fieldIndex] != typeString)
       && (fieldTypes[fieldIndex] != typeBytes)
     ) {
       printLog(ERR, "Request to get Bytes table from DbResult not "
         "fully-composed of Bytes fields.\n");
+      printLog(TRACE, "EXIT dbResultGetBytesTable() = {%p}\n", returnValue);
       return returnValue; // NULL
     }
   }
   
   returnValue = (const Bytes**) dbResult->rows;
   
-  printLog(TRACE, "EXIT dbResultGetBytesTable() = {%p})\n", returnValue);
+  printLog(TRACE, "EXIT dbResultGetBytesTable() = {%p}\n", returnValue);
+  return returnValue;
+}
+
+/// const Bytes** dbResultTakeBytesTable(DbResult *dbResult)
+///
+/// @brief Get a mutable reference to the the full table of results cast to
+/// a Bytes table and remove the table from the DbResult.  On success, the
+/// caller will own the underlying Bytes table and will be responsible for
+/// freeing it.
+///
+/// @note This function only works if all the fields are Bytes objects
+/// (typeString or typeBytes).  If this is not true, this function will return
+/// NULL since mixed types would potentially result in undefined behavior.  If
+/// you want a guaranteed Bytes table, use dbResultToBytesTable.  If you know
+/// what you are doing and don't care about the possibility that the results may
+/// be mixed type, use dbResultGetRows.
+///
+/// @param dbResult The DbResult instance to get the table of.
+///
+/// @return Returns a pointer to the rows of the DbResult cast to a
+/// "const Bytes**" on success, NULL on failure.
+Bytes** dbResultTakeBytesTable(DbResult *dbResult) {
+  printLog(TRACE, "ENTER dbResultTakeBytesTable()\n");
+  
+  Bytes **returnValue = (Bytes**) dbResultGetBytesTable(dbResult);
+  if (returnValue != NULL) {
+    dbResult->rows = NULL;
+  }
+  
+  printLog(TRACE, "EXIT dbResultTakeBytesTable() = {%p}\n", returnValue);
   return returnValue;
 }
 
@@ -836,7 +867,7 @@ DbResult* dbGetValuesLike_(Database *database,
       "EXIT dbGetValuesLike_(database=%p, dbName=\"%s\", tableName=\"%s\", "
       "select=\"%s\", orderBy=\"%s\") = {%llu results}\n",
       database, dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-      llu(returnValue->numResults));
+      llu(dbGetNumResults(returnValue)));
     return returnValue;
   }
   
@@ -853,7 +884,7 @@ DbResult* dbGetValuesLike_(Database *database,
     "EXIT dbGetValuesLike_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", orderBy=\"%s\") = {%llu results}\n",
     database, dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   return returnValue;
 }
 
@@ -902,7 +933,7 @@ DbResult* dbGetRecordsLike_(Database *database,
     "EXIT dbGetRecordsLike_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "orderBy=\"%s\") = {%llu results}\n",
     database, dbName, tableName, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   return returnValue;
 }
 
@@ -1008,7 +1039,7 @@ void* dbGetResultByIndex(const DbResult *dbResult,
       (type != NULL) ? type->name : "(no type)",
       (type == typeString) ? _emptyDatabaseString : "NULL");
     return (type == typeString) ? (void*) _emptyDatabaseString : (void*) NULL;
-  } else if (resultIndex >= dbResult->numRows) {
+  } else if (resultIndex >= dbGetNumRows(dbResult)) {
     printLog(DEBUG, "resultIndex out of range for DbResult.\n");
     printLog(TRACE,
       "EXIT dbGetResultByIndex(dbName=\"%s\", tableName=\"%s\", "
@@ -1017,7 +1048,7 @@ void* dbGetResultByIndex(const DbResult *dbResult,
       (type != NULL) ? type->name : "(no type)",
       (type == typeString) ? _emptyDatabaseString : "NULL");
     return (type == typeString) ? (void*) _emptyDatabaseString : (void*) NULL;
-  } else if (fieldIndex >= dbResult->numFields) {
+  } else if (fieldIndex >= dbGetNumFields(dbResult)) {
     printLog(DEBUG, "fieldIndex out of range for DbResult.\n");
     printLog(TRACE,
       "EXIT dbGetResultByIndex(dbName=\"%s\", tableName=\"%s\", "
@@ -1085,12 +1116,12 @@ i64 dbGetFieldIndexByName(const DbResult *dbResult, const char *fieldName) {
     // No hash table.  Do a linear search.  This is the expected case.
     u64 i = 0;
     const char **fieldNames = dbGetFieldNames(dbResult);
-    for (i = 0; i < dbResult->numFields; i++) {
+    for (i = 0; i < dbGetNumFields(dbResult); i++) {
       if (strcmp(fieldNames[i], fieldName) == 0) {
         break;
       }
     }
-    if (i < dbResult->numFields) {
+    if (i < dbGetNumFields(dbResult)) {
       fieldIndex = (i64) i;
     }
   } else {
@@ -1205,7 +1236,7 @@ i64 dbGetResultIndexByLookupDict(const DbResult *dbResult, Dictionary *lookupDic
     return resultIndex; // -1, bad status
   }
   
-  for (u64 ri = 0; ri < dbResult->numResults; ri++) {
+  for (u64 ri = 0; ri < dbGetNumResults(dbResult); ri++) {
     bool match = true;
     
     for (DictionaryEntry *cur = lookupDict->head;
@@ -1385,13 +1416,13 @@ bool dbUpdateResult_(const DbResult *dbResult, u64 resultIndex, ...) {
     "ENTER dbUpdateResult_(dbName=\"%s\", tableName=\"%s\", resultIndex=%llu)\n",
     dbResult->dbName, dbResult->tableName, llu(resultIndex));
   
-  if (resultIndex >= dbResult->numResults) {
+  if (resultIndex >= dbGetNumResults(dbResult)) {
     printLog(WARN, "resultIndex out of range for DbResult.\n");
     printLog(TRACE,
       "EXIT dbUpdateResult_(dbName=\"%s\", tableName=\"%s\", resultIndex=%llu) "
       "= {%s}\n", dbResult->dbName, dbResult->tableName, llu(resultIndex), "false");
     return false;
-  } else if (dbResult->numFields == 0) {
+  } else if (dbGetNumFields(dbResult) == 0) {
     printLog(WARN, "Invalid DbResult provided.\n");
     printLog(TRACE,
       "EXIT dbUpdateResult_(dbName=\"%s\", tableName=\"%s\", resultIndex=%llu) "
@@ -1921,7 +1952,7 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
   u64 firstRowLength = 0;
   // Go through the first row and get the number of bytes the output would
   // contain.
-  u64 numFields = dbResult->numFields;
+  u64 numFields = dbGetNumFields(dbResult);
   for (u64 fieldIndex = 0; fieldIndex < numFields; ++fieldIndex) {
     if ((dbResult->fieldTypes[fieldIndex] == typeString)
       || (dbResult->fieldTypes[fieldIndex] == typeBytes)
@@ -1941,7 +1972,7 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
   firstRowLength += ((numFields << 1) + numFields) + 2;
   
   // Estimate the return value's size.
-  bytesAllocate(&returnValue, dbResult->numRows * firstRowLength);
+  bytesAllocate(&returnValue, dbGetNumRows(dbResult) * firstRowLength);
   if (returnValue == NULL) {
     // malloc failure weas already logged.  Just return.
     return returnValue; // NULL
@@ -1961,7 +1992,7 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
     bytesAddBytes(&returnValue, fieldName);
     bytesAddBytes(&returnValue, doubleQuote);
     
-    if (field < dbResult->numFields - 1) {
+    if (field < dbGetNumFields(dbResult) - 1) {
       bytesAddBytes(&returnValue, comma);
     }
   }
@@ -1970,8 +2001,8 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
   Bytes fieldValue = NULL;
   int typeStringIndex = getIndexFromTypeDescriptor(typeString);
   int typeBytesNoCopyIndex = getIndexFromTypeDescriptor(typeBytesNoCopy);
-  for (u64 row = 0; row < dbResult->numResults; row++) {
-    for (u64 field = 0; field < dbResult->numFields; field++) {
+  for (u64 row = 0; row < dbGetNumResults(dbResult); row++) {
+    for (u64 field = 0; field < dbGetNumFields(dbResult); field++) {
       int typeIndex = getIndexFromTypeDescriptor(dbResult->fieldTypes[field]);
       if ((typeIndex >= typeStringIndex)
         && (typeIndex <= typeBytesNoCopyIndex)
@@ -1992,12 +2023,12 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
       }
       fieldValue = bytesDestroy(fieldValue);
       
-      if (field < dbResult->numFields - 1) {
+      if (field < dbGetNumFields(dbResult) - 1) {
         bytesAddBytes(&returnValue, comma);
       }
     }
     
-    if (row < dbResult->numResults) {
+    if (row < dbGetNumResults(dbResult)) {
       bytesAddBytes(&returnValue, newline);
     }
   }
@@ -2024,7 +2055,7 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
  *     // Nothing to do.
  *     rows = freeBytesTable(rows);
  *     printLog(TRACE, "EXIT csvToDbResult(csv=\"%s\") = {NOT successful}\n", csv);
- *     return returnValue; // returnValue->successful is false
+ *     return returnValue; // dbQuerySuccessful(returnValue) is false
  *   } else if (rows[1] == NULL) {
  *     // Everything is on one row.  This may be valid or we may have mis-parsed.
  *     // Check for POSIX-formated line endings.
@@ -2071,7 +2102,7 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
  *   }
  *   
  *   printLog(TRACE, "EXIT csvToDbResult(csv=\"%s\") = {%s}\n", csv,
- *     (returnValue->successful == true) ? "successful" : "NOT successful");
+ *     (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
  *   return returnValue;
  * }
  */
@@ -2116,8 +2147,8 @@ bool dbAddRecords(Database *database,
   //    b. Set the TypeDescriptor in the dbResult's fieldTypes array to the
   //       value of the typeInfo field for that row in the description.
   DbResult *tableDescription = dbDescribeTable(database, dbName, tableName);
-  if ((tableDescription != NULL) && (tableDescription->numResults > 0)) {
-    for (u64 ii = 0; ii < tableDescription->numResults; ii++) {
+  if ((tableDescription != NULL) && (dbGetNumResults(tableDescription) > 0)) {
+    for (u64 ii = 0; ii < dbGetNumResults(tableDescription); ii++) {
       const char *fieldName
         = dbGetStringByName(tableDescription, ii, "fieldName");
       i64 fieldIndex = dbGetFieldIndexByName(dbResult, fieldName);
@@ -2656,7 +2687,7 @@ DbResult* dbGetValuesDict(Database *database, const char *dbName,
     "EXIT dbGetValuesDict(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", dict=%p) = {%s}",
     database, dbName, tableName, select, dict,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -2710,7 +2741,7 @@ DbResult* dbGetValuesDictOrderBy(Database *database, const char *dbName,
     "EXIT dbGetValuesDictOrderBy(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", orderBy=\"%s\", dict=%p) = {%s}",
     database, dbName, tableName, select, orderBy, dict,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -2745,7 +2776,7 @@ DbResult* dbGetTableNames(Database *database, const char *dbName) {
   
   printLog(TRACE,
     "EXIT dbGetTableNames(database=%p, dbName=\"%s\") = {%s}", database, dbName,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -2833,9 +2864,9 @@ DbResult* dbDescribeTable(Database *database, const char *dbName,
   dbWaitForTableUnlocked(database, dbName, tableName);
   returnValue = database->describeTable(database->db, dbName, tableName);
   
-  if (returnValue->successful == true) {
+  if (dbQuerySuccessful(returnValue) == true) {
     if (database->dbType == SQL) {
-      for (u64 row = 1; row < returnValue->numRows; row++) {
+      for (u64 row = 1; row < dbGetNumRows(returnValue); row++) {
         // Determine the TypeDescriptor we should have.
         char *typeInfo = (char*) returnValue->rows[row][1];
         TypeDescriptor *type = sqlTypeNameToTypeDescriptor(typeInfo);
@@ -2851,7 +2882,7 @@ DbResult* dbDescribeTable(Database *database, const char *dbName,
   printLog(TRACE,
     "EXIT dbDescribeTable(database=%p, dbName=\"%s\", tableName=\"%s\") "
     "= {%s}\n", database, dbName, tableName,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -3039,7 +3070,7 @@ void* dbSetResultByIndex(DbResult *dbResult,
       dbResult->dbName, dbResult->tableName, llu(resultIndex), llu(fieldIndex),
       value);
     return NULL;
-  } else if (resultIndex >= dbResult->numRows) {
+  } else if (resultIndex >= dbGetNumRows(dbResult)) {
     printLog(WARN, "resultIndex out of range for DbResult.\n");
     printLog(TRACE,
       "EXIT dbSetResultByIndex(dbName=\"%s\", tableName=\"%s\", "
@@ -3047,7 +3078,7 @@ void* dbSetResultByIndex(DbResult *dbResult,
       dbResult->dbName, dbResult->tableName, llu(resultIndex), llu(fieldIndex),
       value);
     return NULL;
-  } else if (fieldIndex >= dbResult->numFields) {
+  } else if (fieldIndex >= dbGetNumFields(dbResult)) {
     printLog(WARN, "fieldIndex out of range for DbResult.\n");
     printLog(TRACE,
       "EXIT dbSetResultByIndex(dbName=\"%s\", tableName=\"%s\", "
@@ -3182,9 +3213,9 @@ bool dbCreateTableFromResult(Database *database, const char *dbName,
     dbDescribeTable(database, dbName, tableName), dbFreeResult);
   const char **fieldNames = dbGetFieldNames(dbResult);
   TypeDescriptor **fieldTypes = dbResult->fieldTypes;
-  if (tableDescription->numResults == dbResult->numFields) {
+  if (dbGetNumResults(tableDescription) == dbGetNumFields(dbResult)) {
     tableMatches = true; // until proven false
-    for (u64 index = 0; index < dbResult->numFields; index++) {
+    for (u64 index = 0; index < dbGetNumFields(dbResult); index++) {
       if (strcmp(dbGetStringByIndex(tableDescription, index, 0),
         fieldNames[index]) != 0
       ) {
@@ -3216,7 +3247,7 @@ bool dbCreateTableFromResult(Database *database, const char *dbName,
   
   // If we got this far, the either the tables don't match or there is no such
   // table in the destination database.  Delete it if it exists.
-  if (tableDescription->numResults > 0) {
+  if (dbGetNumResults(tableDescription) > 0) {
     returnValue = dbDeleteTable(database, dbName, tableName);
   }
   scopeDestroy(tableDescription);
@@ -3248,7 +3279,7 @@ bool dbCreateTableFromResult(Database *database, const char *dbName,
   }
   char *primaryKey = NULL;
   scopeAdd(straddstr(&primaryKey, ""), pointerDestroyFunction);
-  for (u64 index = 0; index < dbResult->numFields; index++) {
+  for (u64 index = 0; index < dbGetNumFields(dbResult); index++) {
     listAddBackEntry(tableList, fieldNames[index], fieldTypes[index],
       typePointerNoOwn);
     if (strcmp(dbGetStringByName(tableDescription, index, "primaryKey"),
@@ -3520,7 +3551,7 @@ Bytes dbResultToBytes_(const DbResult *dbResult,
   u64 firstRowLength = 0;
   // Go through the first row and get the number of bytes the output would
   // contain.
-  u64 numFields = dbResult->numFields;
+  u64 numFields = dbGetNumFields(dbResult);
   for (u64 fieldIndex = 0; fieldIndex < numFields; ++fieldIndex) {
     if ((dbResult->fieldTypes[fieldIndex] == typeString)
       || (dbResult->fieldTypes[fieldIndex] == typeBytes)
@@ -3541,7 +3572,7 @@ Bytes dbResultToBytes_(const DbResult *dbResult,
   firstRowLength += (bytesLength(fdelim) * numFields) + bytesLength(rdelim);
   
   // Estimate the return value's size.
-  bytesAllocate(&returnValue, dbResult->numRows * firstRowLength);
+  bytesAllocate(&returnValue, dbGetNumRows(dbResult) * firstRowLength);
   if (returnValue == NULL) {
     // malloc failure weas already logged.  Just return.
     return returnValue; // NULL
@@ -3557,7 +3588,7 @@ Bytes dbResultToBytes_(const DbResult *dbResult,
       bytesAddBytes(&returnValue, fdelim);
     }
   }
-  u64 numResults = dbResult->numResults;
+  u64 numResults = dbGetNumResults(dbResult);
   if (numResults > 0) {
     bytesAddBytes(&returnValue, rdelim);
   }
@@ -3631,8 +3662,8 @@ int dbResultCompare(DbResult *dbResultA, DbResult *dbResultB) {
     return returnValue;
   }
   
-  if (dbResultA->numFields != dbResultB->numFields) {
-    if (dbResultA->numFields < dbResultB->numFields) {
+  if (dbGetNumFields(dbResultA) != dbGetNumFields(dbResultB)) {
+    if (dbGetNumFields(dbResultA) < dbGetNumFields(dbResultB)) {
       returnValue--;
     } else {
       returnValue++;
@@ -3642,7 +3673,7 @@ int dbResultCompare(DbResult *dbResultA, DbResult *dbResultB) {
     return returnValue;
   }
   
-  u64 numFields = dbResultA->numFields;
+  u64 numFields = dbGetNumFields(dbResultA);
   const char **fieldNamesA = dbGetFieldNames(dbResultA);
   const char **fieldNamesB = dbGetFieldNames(dbResultB);
   int (*stringCompare)(const volatile void*, const volatile void*)
@@ -3669,8 +3700,8 @@ int dbResultCompare(DbResult *dbResultA, DbResult *dbResultB) {
   }
   // Field names and field types are identical.
   
-  if (dbResultA->numResults != dbResultB->numResults) {
-    if (dbResultA->numResults < dbResultB->numResults) {
+  if (dbGetNumResults(dbResultA) != dbGetNumResults(dbResultB)) {
+    if (dbGetNumResults(dbResultA) < dbGetNumResults(dbResultB)) {
       returnValue--;
     } else {
       returnValue++;
@@ -3681,7 +3712,7 @@ int dbResultCompare(DbResult *dbResultA, DbResult *dbResultB) {
   }
   // Number of results is identical.
   
-  u64 numResults = dbResultA->numResults;
+  u64 numResults = dbGetNumResults(dbResultA);
   int (*bytesCompare)(const volatile void*, const volatile void*)
     = typeBytes->compare;
   int (*valueCompare)(const volatile void*, const volatile void*) = NULL;
@@ -3731,11 +3762,11 @@ DbResult* dbResultCopy(DbResult *dbResult) {
     return returnValue; // NULL
   }
   
-  returnValue->numRows = dbResult->numRows;
-  u64 numRows = dbResult->numRows;
-  returnValue->numResults = dbResult->numResults;
-  returnValue->numFields = dbResult->numFields;
-  u64 numFields = dbResult->numFields;
+  returnValue->numRows = dbGetNumRows(dbResult);
+  u64 numRows = dbGetNumRows(dbResult);
+  returnValue->numResults = dbGetNumResults(dbResult);
+  returnValue->numFields = dbGetNumFields(dbResult);
+  u64 numFields = dbGetNumFields(dbResult);
   
   TypeDescriptor **fieldTypes = dbResult->fieldTypes;
   returnValue->fieldTypes
@@ -3786,7 +3817,7 @@ DbResult* dbResultCopy(DbResult *dbResult) {
   
   straddstr(&returnValue->dbName, dbResult->dbName);
   straddstr(&returnValue->tableName, dbResult->tableName);
-  returnValue->successful = dbResult->successful;
+  returnValue->successful = dbQuerySuccessful(dbResult);
   returnValue->fieldNameIndexMap = htCopy(dbResult->fieldNameIndexMap);
   returnValue->database = dbResult->database;
   
@@ -3842,7 +3873,7 @@ DbResult* dbGetOrValuesDict(Database *database,
     tableName, select, orderBy, args);
   u64 numResults = 0;
   if (queryResult != NULL) {
-    numResults = queryResult->numResults;
+    numResults = dbGetNumResults(queryResult);
   }
   // numResults is only used in logging, so cast it to a void to keep the
   // compmiler from complaining when logging is disabled.
@@ -4387,44 +4418,44 @@ DbResult* dbResultGetRange(
   DbResult *outputResult = (DbResult*) calloc(1, sizeof(DbResult));
   
   // Do all the straight copies first.
-  outputResult->numFields = inputResult->numFields;
+  outputResult->numFields = dbGetNumFields(inputResult);
   outputResult->fieldTypes = (TypeDescriptor**) malloc(
-    outputResult->numFields * sizeof(TypeDescriptor*));
+    dbGetNumFields(outputResult) * sizeof(TypeDescriptor*));
   memcpy(outputResult->fieldTypes, inputResult->fieldTypes,
-    outputResult->numFields * sizeof(TypeDescriptor*));
-  // outputResult->numRows is computed below
-  // outputResult->numResults is computed below
+    dbGetNumFields(outputResult) * sizeof(TypeDescriptor*));
+  // dbGetNumRows(outputResult) is computed below
+  // dbGetNumResults(outputResult) is computed below
   // outputResult->rows is computed below
   straddstr(&outputResult->dbName, inputResult->dbName);
   straddstr(&outputResult->tableName, inputResult->tableName);
-  outputResult->successful = inputResult->successful;
+  outputResult->successful = dbQuerySuccessful(inputResult);
   outputResult->fieldNameIndexMap = htCopy(inputResult->fieldNameIndexMap);
   outputResult->database = inputResult->database;
   
   // Figure out how much we need to allocate for our subset range.
-  if (endIndex >= inputResult->numResults) {
-    if (inputResult->numResults > 0) {
-      endIndex = inputResult->numResults;
+  if (endIndex >= dbGetNumResults(inputResult)) {
+    if (dbGetNumResults(inputResult) > 0) {
+      endIndex = dbGetNumResults(inputResult);
     } else {
       endIndex = 0;
     }
   }
   outputResult->numResults = 0;
-  if ((endIndex > startIndex) && (endIndex <= inputResult->numResults)) {
+  if ((endIndex > startIndex) && (endIndex <= dbGetNumResults(inputResult))) {
     outputResult->numResults = endIndex - startIndex;
   }
-  outputResult->numRows = outputResult->numResults + 1;
+  outputResult->numRows = dbGetNumResults(outputResult) + 1;
   outputResult->rows = (void***) calloc(1,
-      (outputResult->numRows + 1) * sizeof(void**));
-  for (u64 ii = 0; ii < outputResult->numRows; ii++) {
+      (dbGetNumRows(outputResult) + 1) * sizeof(void**));
+  for (u64 ii = 0; ii < dbGetNumRows(outputResult); ii++) {
     outputResult->rows[ii] = (void**) calloc(1,
-      (outputResult->numFields + 1) * sizeof(void*));
+      (dbGetNumFields(outputResult) + 1) * sizeof(void*));
   }
   
   // Copy over the values.
   Bytes *inputFieldNames = (Bytes*) inputResult->rows[0];
   Bytes *outputFieldNames = (Bytes*) outputResult->rows[0];
-  for (u64 jj = 0; jj < inputResult->numFields; jj++) {
+  for (u64 jj = 0; jj < dbGetNumFields(inputResult); jj++) {
     bytesAddBytes(&outputFieldNames[jj], inputFieldNames[jj]);
   }
   u64 outputRow = 1;
@@ -4433,7 +4464,7 @@ DbResult* dbResultGetRange(
   startIndex++;
   endIndex++;
   for (u64 ii = startIndex; ii < endIndex; ii++) {
-    for (u64 jj = 0; jj < inputResult->numFields; jj++) {
+    for (u64 jj = 0; jj < dbGetNumFields(inputResult); jj++) {
       if (inputResult->fieldTypes[jj] == typeString) {
         // These are really Bytes objects.  Treat them as such.  This is the
         // expected usual case, so list it first.
@@ -4448,7 +4479,7 @@ DbResult* dbResultGetRange(
   }
   
   SCOPE_EXIT("inputResult=%p, startIndex=%llu, endIndex=%llu", "%llu results",
-    inputResult, llu(startIndex), llu(endIndex), llu(outputResult->numResults));
+    inputResult, llu(startIndex), llu(endIndex), llu(dbGetNumResults(outputResult)));
   return outputResult;
 }
 

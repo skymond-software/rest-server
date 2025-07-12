@@ -233,7 +233,7 @@ Database* sqliteInit(const char *databasePath) {
       goto sqliteInitFailure;
     }
     queryResult = sqliteExecQueryString(sqlite, query);
-    if (queryResult->successful == false) {
+    if (dbQuerySuccessful(queryResult) == false) {
       printLog(ERR, "Could not attach '%s' as main%s.\n",
         (char*) mainDatabasePath, dbInstance);
       queryResult = dbFreeResult(queryResult);
@@ -249,10 +249,10 @@ Database* sqliteInit(const char *databasePath) {
   // Check to make sure the Databases table is there.
   queryResult = sqliteExecQueryString(sqlite,
     "select name from main.sqlite_schema where type='table';");
-  if (queryResult->successful == false) {
+  if (dbQuerySuccessful(queryResult) == false) {
     printLog(ERR, "Getting tables from main.sqlite_schema failed.\n");
   }
-  for (i = 0; i < queryResult->numResults; i++) {
+  for (i = 0; i < dbGetNumResults(queryResult); i++) {
     if (strcmpci(dbGetStringByIndex(queryResult, i, 0), "Databases") == 0) {
       databasesTableFound = true;
       break;
@@ -264,7 +264,7 @@ Database* sqliteInit(const char *databasePath) {
     queryResult = sqliteExecQueryString(sqlite,
       "create table main.Databases("
         "name varchar(40) primary key, type varchar(40), connection blob);");
-    if (queryResult->successful == false) {
+    if (dbQuerySuccessful(queryResult) == false) {
       queryResult = dbFreeResult(queryResult);
       printLog(ERR, "Could not create main.Databases metadata table.\n");
       goto sqliteInitFailure;
@@ -275,7 +275,7 @@ Database* sqliteInit(const char *databasePath) {
   // Attach all the other SQLite databases
   queryResult = sqliteExecQueryString(sqlite,
     "select name, connection from main.Databases where type='sqlite';");
-  for (i = 0; i < queryResult->numResults; i++) {
+  for (i = 0; i < dbGetNumResults(queryResult); i++) {
     // The connection field holds the path to the database for SQLite databases.
     if (asprintf(&query, "attach '%s' as %s%s;",
       dbGetStringByName(queryResult, i, "connection"),
@@ -287,7 +287,7 @@ Database* sqliteInit(const char *databasePath) {
       goto sqliteInitFailure;
     }
     DbResult* attachResult = sqliteExecQueryString(sqlite, query);
-    if (attachResult->successful == false) {
+    if (dbQuerySuccessful(attachResult) == false) {
       printLog(ERR, "Could not attach '%s' as %s.\n",
         dbGetStringByName(queryResult, i, "connection"),
         dbGetStringByName(queryResult, i, "name"));
@@ -457,7 +457,7 @@ DbResult* sqliteExecQueryString(void *connection, const char *queryString) {
   
   printLog(FLOOD,
     "EXIT sqliteExecQueryString(database=%p, queryString=\"%s\") = {%llu results}",
-    database, queryString, llu(queryResult->numResults));
+    database, queryString, llu(dbGetNumResults(queryResult)));
   return queryResult;
 }
 
@@ -547,7 +547,7 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
     printLog(FLOOD,
       "EXIT sqliteExecQueryBytes(database=%p, queryBytes=\"%s\") = {NOT successful}",
       database, queryBytes);
-    return queryResult; // queryResult->successful is false
+    return queryResult; // dbQuerySuccessful(queryResult) is false
   }
   
   // Step through the query results.
@@ -559,7 +559,7 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
     if (numFields <= 0) {
       break;
     }
-    if (queryResult->numRows == 0) {
+    if (dbGetNumRows(queryResult) == 0) {
       // Uninitialized queryResult->  Populate initial data.
       queryResult->numFields = (u64) numFields;
       
@@ -592,7 +592,7 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
       queryResult->numRows = 1;
     }
     
-    row = queryResult->numRows;
+    row = dbGetNumRows(queryResult);
     check = (void***) realloc(
       queryResult->rows, (row + 2) * sizeof(void**));
     if (check == NULL) {
@@ -660,8 +660,8 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
   
   if (rc == SQLITE_DONE) {
     queryResult->successful = true;
-    if (queryResult->numRows > 0) {
-      queryResult->numResults = queryResult->numRows - 1;
+    if (dbGetNumRows(queryResult) > 0) {
+      queryResult->numResults = dbGetNumRows(queryResult) - 1;
     }
   } else {
     printLog(ERR, "sqlite3_step failed.\n");
@@ -689,7 +689,7 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
   
   printLog(FLOOD,
     "EXIT sqliteExecQueryBytes(database=%p, queryBytes=\"%s\") = {%llu results}",
-    database, queryBytes, llu(queryResult->numResults));
+    database, queryBytes, llu(dbGetNumResults(queryResult)));
   return queryResult;
   
 fieldMallocFailure:
@@ -701,8 +701,8 @@ fieldMallocFailure:
   queryResult->rows[row] = (void**) pointerDestroy(queryResult->rows[row]);
   
 rowMallocFailure:
-  numRows = (int) queryResult->numRows;
-  numFields = (int) queryResult->numFields;
+  numRows = (int) dbGetNumRows(queryResult);
+  numFields = (int) dbGetNumFields(queryResult);
   for (i = 0; i < numRows; i++) {
     for (j = 0; j < numFields; j++) {
       queryResult->rows[row][j]
@@ -720,11 +720,11 @@ rowsMallocFailure:
 fieldTypesMallocFailure:
   queryResult->numFields = 0;
   sqlite3_finalize(preparedStatement);
-  // queryResult->successful is false.
+  // dbQuerySuccessful(queryResult) is false.
   
   printLog(FLOOD,
     "EXIT sqliteExecQueryBytes(database=%p, queryBytes=\"%s\") = {%llu results}",
-    database, queryBytes, llu(queryResult->numResults));
+    database, queryBytes, llu(dbGetNumResults(queryResult)));
   return queryResult;
 }
 
@@ -746,7 +746,7 @@ DbResult* sqliteGetDatabaseNames(void *db) {
   DbResult *queryResult
     = sqliteExecQueryString(database->connection,
       "pragma database_list;");
-  if ((queryResult->successful == true) && (queryResult->numFields == 3)) {
+  if ((dbQuerySuccessful(queryResult) == true) && (dbGetNumFields(queryResult) == 3)) {
     // Format of results:
     // seq, name, file
     // We're only interested in column 2.  We could create a new DbResult and
@@ -758,7 +758,7 @@ DbResult* sqliteGetDatabaseNames(void *db) {
     queryResult->rows[0][0] = queryResult->rows[0][1];
     queryResult->rows[0][2] = (void*) bytesDestroy((Bytes) queryResult->rows[0][2]);
     queryResult->rows[0] = (void**) realloc(queryResult->rows[0], sizeof(void*));
-    for (u64 i = 1; i < queryResult->numRows; i++) {
+    for (u64 i = 1; i < dbGetNumRows(queryResult); i++) {
       queryResult->rows[i][0] = queryResult->fieldTypes[0]->destroy(queryResult->rows[i][0]);
       queryResult->rows[i][0] = queryResult->rows[i][1];
       // All strings are encoded as Bytes objects, so destroy them properly.
@@ -773,7 +773,7 @@ DbResult* sqliteGetDatabaseNames(void *db) {
   
   printLog(TRACE,
     "EXIT sqliteGetDatabaseNames(database=%p) = {%s}\n",
-    database, (queryResult->successful) ? "successful" : "NOT successful");
+    database, (dbQuerySuccessful(queryResult)) ? "successful" : "NOT successful");
   return queryResult;
 }
 
@@ -815,7 +815,7 @@ DbResult* sqliteGetTableNames(void *db, const char *dbString) {
   
   printLog(TRACE,
     "EXIT sqliteGetTableNames(database=%p, dbName=\"%s\") = {%llu results}\n",
-    database, dbName, llu(queryResult->numRows));
+    database, dbName, llu(dbGetNumRows(queryResult)));
   dbName = stringDestroy(dbName);
   return queryResult;
 }
@@ -860,7 +860,7 @@ bool sqliteAddDatabase(void *db, const char *dbString) {
   }
   queryResult = sqliteExecQueryString(sqlite, query);
   query = stringDestroy(query);
-  bool returnValue = queryResult->successful;
+  bool returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   if (returnValue == true) {
     if (asprintf(&query, "insert into main%s.Databases (name, type, connection) "
@@ -876,7 +876,7 @@ bool sqliteAddDatabase(void *db, const char *dbString) {
     }
     queryResult = sqliteExecQueryString(sqlite, query);
     query = stringDestroy(query);
-    if (!queryResult->successful) {
+    if (!dbQuerySuccessful(queryResult)) {
       returnValue = false;
       printLog(ERR, "Could not add database \"%s\" to main.Databases table.\n",
         dbName);
@@ -937,7 +937,7 @@ bool sqliteDeleteDatabase(void *db, const char *dbString) {
   }
   queryResult = sqliteExecQueryString(sqlite, query);
   query = stringDestroy(query);
-  bool returnValue = queryResult->successful;
+  bool returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   // name is the primary key of the database, so only need to specify that.
@@ -954,7 +954,7 @@ bool sqliteDeleteDatabase(void *db, const char *dbString) {
   }
   queryResult = sqliteExecQueryString(sqlite, query);
   query = stringDestroy(query);
-  returnValue &= queryResult->successful;
+  returnValue &= dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   remove((char*) databasePath);
@@ -1093,7 +1093,7 @@ bool sqliteStartTransaction(void *db) {
   if (sqlite->transactionCount == 0) {
     DbResult *queryResult
       = database->stringQuery(database->connection, "begin transaction;");
-    startSuccessful = queryResult->successful;
+    startSuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
   }
   sqlite->transactionCount++;
@@ -1161,7 +1161,7 @@ bool sqliteCommitTransaction(void *db) {
   // sqlite->transactionCount == 1
   DbResult *queryResult
     = database->stringQuery(database->connection, "commit;");
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   sqlite->transactionCount--; // This sets transactionCount to 0 in this case.
   mtx_unlock(&sqlite->transactionMutex);
@@ -1227,7 +1227,7 @@ bool sqliteRollbackTransaction(void *db) {
   // sqlite->transactionCount == 1
   DbResult *queryResult
     = database->stringQuery(database->connection, "rollback;");
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   sqlite->transactionCount--; // This sets transactionCount to 0 in this case.
   mtx_unlock(&sqlite->transactionMutex);
@@ -1271,7 +1271,7 @@ void* sqliteDisconnect(void *db) {
     // Disconnect the databases.
     DbResult *queryResult = sqliteGetDatabaseNames(sqlDatabase);
     Bytes query = NULL;
-    for (u64 i = 0; i < queryResult->numResults; i++) {
+    for (u64 i = 0; i < dbGetNumResults(queryResult); i++) {
       const char *dbName = dbGetStringByName(queryResult, i, "name");
       
       // Optimize the database before detaching it.
@@ -1283,7 +1283,7 @@ void* sqliteDisconnect(void *db) {
         break;
       }
       DbResult *optimizeResult = sqliteExecQueryBytes(sqlite, query);
-      if (!optimizeResult->successful) {
+      if (!dbQuerySuccessful(optimizeResult)) {
         printLog(WARN, "Could not optimize database \"%s\".\n", dbName);
       }
       optimizeResult = dbFreeResult(optimizeResult);
@@ -1299,7 +1299,7 @@ void* sqliteDisconnect(void *db) {
         break;
       }
       DbResult *detachResult = sqliteExecQueryBytes(sqlite, query);
-      if (!detachResult->successful) {
+      if (!dbQuerySuccessful(detachResult)) {
         printLog(ERR, "Could not detach database \"%s\".\n", dbName);
         printLog(TRACE,
           "EXIT sqliteDisconnect(sqlDatabase=%p) = {NOT successful}\n",
@@ -1375,7 +1375,7 @@ DbResult* sqliteDescribeTable(void *connection, const char *dbString,
     LOG_MALLOC_FAILURE();
     exit(1);
   }
-  if (queryResult->successful == true) {
+  if (dbQuerySuccessful(queryResult) == true) {
     returnValue->successful = true;
     
     returnValue->numFields = 3;
@@ -1385,21 +1385,21 @@ DbResult* sqliteDescribeTable(void *connection, const char *dbString,
     returnValue->fieldTypes[1] = typeBytes;
     returnValue->fieldTypes[2] = typeBytes;
     
-    returnValue->numRows = queryResult->numRows;
-    returnValue->numResults = queryResult->numResults;
-    if (returnValue->numRows > 0) {
+    returnValue->numRows = dbGetNumRows(queryResult);
+    returnValue->numResults = dbGetNumResults(queryResult);
+    if (dbGetNumRows(returnValue) > 0) {
       returnValue->rows
-        = (void***) calloc(1, (returnValue->numRows + 1) * sizeof(void**));
+        = (void***) calloc(1, (dbGetNumRows(returnValue) + 1) * sizeof(void**));
       returnValue->rows[0]
-        = (void**) calloc(1, returnValue->numFields * sizeof(void*));
+        = (void**) calloc(1, dbGetNumFields(returnValue) * sizeof(void*));
       bytesAddStr((Bytes*) &returnValue->rows[0][0], "fieldName");
       bytesAddStr((Bytes*) &returnValue->rows[0][1], "typeInfo");
       bytesAddStr((Bytes*) &returnValue->rows[0][2], "primaryKey");
     }
     
-    for (u64 row = 1; row < returnValue->numRows; row++) {
+    for (u64 row = 1; row < dbGetNumRows(returnValue); row++) {
       returnValue->rows[row]
-        = (void**) calloc(1, returnValue->numFields * sizeof(void*));
+        = (void**) calloc(1, dbGetNumFields(returnValue) * sizeof(void*));
       bytesAddBytes((Bytes*) &returnValue->rows[row][0],
         dbGetBytesByName(queryResult, row - 1, "name"));
       bytesAddBytes((Bytes*) &returnValue->rows[row][1],
@@ -1420,7 +1420,7 @@ DbResult* sqliteDescribeTable(void *connection, const char *dbString,
   printLog(TRACE,
     "EXIT sqliteDescribeTable(database=%p, dbString=%s, tableName=%s) = {%s}\n",
     database, dbString, tableName,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -1473,7 +1473,7 @@ bool sqliteChangeFieldType(void *db, const char *dbName,
   }
   
   DbResult *records = sqlGetRecords(database, dbName, tableName);
-  if (records->successful == false) {
+  if (dbQuerySuccessful(records) == false) {
     printLog(ERR, "Could not get records from %s.%s.\n", dbName, tableName);
     records = dbFreeResult(records);
     if (!sqlRollbackTransaction(database)) {
@@ -1491,7 +1491,7 @@ bool sqliteChangeFieldType(void *db, const char *dbName,
   bool fieldFound = false;
   const char **fieldNames = dbGetFieldNames(records);
   u64 fieldIndex = 0;
-  for (; fieldIndex < records->numFields; fieldIndex++) {
+  for (; fieldIndex < dbGetNumFields(records); fieldIndex++) {
     if (strcmp(fieldNames[fieldIndex], fieldName) == 0) {
       records->fieldTypes[fieldIndex] = (TypeDescriptor*) type;
       fieldFound = true;
@@ -1530,7 +1530,7 @@ bool sqliteChangeFieldType(void *db, const char *dbName,
     return successful; // false
   }
   
-  for (u64 fieldIndex = 0; fieldIndex < records->numFields; fieldIndex++) {
+  for (u64 fieldIndex = 0; fieldIndex < dbGetNumFields(records); fieldIndex++) {
     if (listAddBackEntry(tableList, fieldNames[fieldIndex],
       records->fieldTypes[fieldIndex], typePointerNoCopy) == NULL
     ) {
@@ -1557,7 +1557,7 @@ bool sqliteChangeFieldType(void *db, const char *dbName,
   
   Bytes primaryKey = NULL;
   DbResult *tableDescription = sqlDescribeTable(database, dbName, tableName);
-  for (u64 i = 0; i < tableDescription->numResults; i++) {
+  for (u64 i = 0; i < dbGetNumResults(tableDescription); i++) {
     if (strcmp(dbGetStringByName(tableDescription, i, "primaryKey"),
       boolNames[true]) == 0
     ) {
@@ -1719,7 +1719,7 @@ bool sqliteLockTablesDict(void *db, const Dictionary *tablesToLock) {
   if (sqlite->transactionCount == 0) {
     DbResult *queryResult
       = database->stringQuery(database->connection, "begin transaction;");
-    querySuccessful = queryResult->successful;
+    querySuccessful = dbQuerySuccessful(queryResult);
     queryResult = dbFreeResult(queryResult);
   }
   if (!querySuccessful) {
@@ -1909,7 +1909,7 @@ bool sqliteAddField(void *db, const char *dbString,
   
   DbResult *existingTable = (DbResult*) scopeAdd(
     sqlGetRecords(database, str(dbString), tableName), dbFreeResult);
-  if (existingTable->successful == false) {
+  if (dbQuerySuccessful(existingTable) == false) {
     printLog(ERR, "Could not get existing table %s.%s from the database.\n",
       dbString, tableName);
     if (!sqliteRollbackTransaction(database)) {
@@ -1942,7 +1942,7 @@ bool sqliteAddField(void *db, const char *dbString,
   DbResult *fieldTypes = (DbResult*) scopeAdd(
     sqliteDescribeTable(database->connection, dbString, tableName),
     dbFreeResult);
-  if (fieldTypes->successful == false) {
+  if (dbQuerySuccessful(fieldTypes) == false) {
     printLog(ERR, "Could not get field types for %s.%s from the database.\n",
       dbString, tableName);
     if (!sqliteRollbackTransaction(database)) {
@@ -1965,7 +1965,7 @@ bool sqliteAddField(void *db, const char *dbString,
   
   char *primaryKey = NULL;
   for (u64 fieldTypeIndex = 0;
-    fieldTypeIndex < fieldTypes->numResults;
+    fieldTypeIndex < dbGetNumResults(fieldTypes);
     fieldTypeIndex++
   ) {
     Bytes fieldName
@@ -2067,7 +2067,7 @@ bool sqliteAddField(void *db, const char *dbString,
   
   // Extend the existing field types.
   TypeDescriptor **check = (TypeDescriptor**) realloc(existingTable->fieldTypes,
-    (existingTable->numFields + 1) * sizeof(TypeDescriptor*));
+    (dbGetNumFields(existingTable) + 1) * sizeof(TypeDescriptor*));
   if (check == NULL) {
     LOG_MALLOC_FAILURE();
     scopeEnd();
@@ -2075,7 +2075,7 @@ bool sqliteAddField(void *db, const char *dbString,
   }
   existingTable->fieldTypes = check;
   // Move everything down.
-  for (u64 fieldIndex = existingTable->numFields;
+  for (u64 fieldIndex = dbGetNumFields(existingTable);
     fieldIndex > beforeFieldIndex;
     fieldIndex--
   ) {
@@ -2088,7 +2088,7 @@ bool sqliteAddField(void *db, const char *dbString,
     
     if ((type != typeString) && (type != typeBytes)) {
       // Convert the new bytes field to a field of the correct type.
-      for (u64 ii = 1; ii < existingTable->numRows; ii++) {
+      for (u64 ii = 1; ii < dbGetNumRows(existingTable); ii++) {
         existingTable->rows[ii][beforeFieldIndex]
           = bytesDestroy((Bytes) existingTable->rows[ii][beforeFieldIndex]);
         existingTable->rows[ii][beforeFieldIndex]
@@ -2238,7 +2238,7 @@ bool sqliteRenameTable(void *db, const char *dbName,
     newTableName);
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE, "EXIT sqliteRenameTable(database=%p, dbName=\"%s\", "
@@ -2338,7 +2338,7 @@ bool sqliteRenameDatabase(void *db,
   }
   scopeAdd(existingDatabases, dbFreeResult);
   // returnValue is currently false.
-  for (u64 ii = 0; ii < existingDatabases->numResults; ii++) {
+  for (u64 ii = 0; ii < dbGetNumResults(existingDatabases); ii++) {
     if (strcmpci(oldDbNameWithInstance,
       dbGetStringByIndex(existingDatabases, ii, 0)) == 0
     ) {
@@ -2355,7 +2355,7 @@ bool sqliteRenameDatabase(void *db,
   
   // Make sure the new database does NOT exist before proceeding.
   // returnValue is currently true.
-  for (u64 ii = 0; ii < existingDatabases->numResults; ii++) {
+  for (u64 ii = 0; ii < dbGetNumResults(existingDatabases); ii++) {
     if (strcmpci(newDbNameWithInstance,
       dbGetStringByIndex(existingDatabases, ii, 0)) == 0
     ) {
@@ -2403,7 +2403,7 @@ bool sqliteRenameDatabase(void *db,
   // Add the new entry into the main.Databases table.
   queryResult = sqliteExecQueryBytes(sqlite, query);
   query = bytesDestroy(query);
-  successful = (queryResult != NULL) ? queryResult->successful : false;
+  successful = (queryResult != NULL) ? dbQuerySuccessful(queryResult) : false;
   queryResult = dbFreeResult(queryResult);
   if (!successful) {
     printLog(ERR,
@@ -2416,7 +2416,7 @@ bool sqliteRenameDatabase(void *db,
   abprintf(&query, "detach database %s;", oldDbNameWithInstance);
   queryResult = sqliteExecQueryBytes(sqlite, query);
   query = bytesDestroy(query);
-  successful = (queryResult != NULL) ? queryResult->successful : false;
+  successful = (queryResult != NULL) ? dbQuerySuccessful(queryResult) : false;
   queryResult = dbFreeResult(queryResult);
   if (!successful) {
     printLog(ERR, "Could not DETACH old database \"%s\".\n",
@@ -2436,7 +2436,7 @@ bool sqliteRenameDatabase(void *db,
     newDatabasePath, newDbNameWithInstance);
   queryResult = sqliteExecQueryBytes(sqlite, query);
   query = bytesDestroy(query);
-  successful = (queryResult != NULL) ? queryResult->successful : false;
+  successful = (queryResult != NULL) ? dbQuerySuccessful(queryResult) : false;
   queryResult = dbFreeResult(queryResult);
   if (!successful) {
     printLog(ERR, "Could not ATTACH new database \"%s\".\n",
@@ -2449,7 +2449,7 @@ bool sqliteRenameDatabase(void *db,
     strOrEmpty(dbInstance), oldDbName);
   queryResult = sqliteExecQueryBytes(sqlite, query);
   query = bytesDestroy(query);
-  successful = (queryResult != NULL) ? queryResult->successful : false;
+  successful = (queryResult != NULL) ? dbQuerySuccessful(queryResult) : false;
   queryResult = dbFreeResult(queryResult);
   if (!successful) {
     printLog(WARN, "Could not delete entry for \"%s\" in main%s.Databases.\n",
@@ -2477,7 +2477,7 @@ renameError:
     oldDatabasePath, oldDbNameWithInstance);
   queryResult = sqliteExecQueryBytes(sqlite, query);
   query = bytesDestroy(query);
-  successful = (queryResult != NULL) ? queryResult->successful : false;
+  successful = (queryResult != NULL) ? dbQuerySuccessful(queryResult) : false;
   queryResult = dbFreeResult(queryResult);
   if (!successful) {
     printLog(ERR, "Could not ATTACH old database \"%s\".\n",
@@ -2491,7 +2491,7 @@ detachError:
     strOrEmpty(dbInstance), newDbName);
   queryResult = sqliteExecQueryBytes(sqlite, query);
   query = bytesDestroy(query);
-  successful = (queryResult != NULL) ? queryResult->successful : false;
+  successful = (queryResult != NULL) ? dbQuerySuccessful(queryResult) : false;
   queryResult = dbFreeResult(queryResult);
   if (!successful) {
     printLog(WARN, "Could not delete entry for \"%s\" in main%s.Databases.\n",
@@ -2563,7 +2563,7 @@ bool sqliteEnsureFieldIndexedVargs(void *database,
   
   DbResult *queryResult
     = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
-  querySuccessful = queryResult->successful;
+  querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   SCOPE_EXIT("database=%p, dbName=%s, tableName=%s, fieldName=%s", "%s",
@@ -2595,7 +2595,7 @@ bool sqliteAddRecords(void *database,
       "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
       "= {NOT successful}\n", database, dbName, tableName);
     return false;
-  } else if ((dbResult == NULL) || (dbResult->numResults == 0)) {
+  } else if ((dbResult == NULL) || (dbGetNumResults(dbResult) == 0)) {
     // Not an error, but nothing to do.
     printLog(TRACE,
       "EXIT sqliteAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
@@ -2622,8 +2622,8 @@ bool sqliteAddRecords(void *database,
   bytesAddStr(&query, tableName);
   bytesAddStr(&query, " values ");
   
-  u64 numResults = dbResult->numResults;
-  u64 numFields = dbResult->numFields;
+  u64 numResults = dbGetNumResults(dbResult);
+  u64 numFields = dbGetNumFields(dbResult);
   TypeDescriptor **fieldTypes = dbResult->fieldTypes;
   for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
     bytesAddStr(&query, "(");
@@ -2679,7 +2679,7 @@ bool sqliteAddRecords(void *database,
   printLog(DEBUG, "Running query \"%s\"\n", str(query));
   queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   if (returnValue == false) {

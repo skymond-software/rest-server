@@ -96,13 +96,13 @@ extern inline bool sqlEnsureFieldTypes(SqlDatabase *sqlDatabase, const char *dbN
       printLog(ERR, "NULL field names.\n");
       return false;
     }
-    for (u64 ii = 0; ii < dbResult->numFields; ii++) {
+    for (u64 ii = 0; ii < dbGetNumFields(dbResult); ii++) {
       if (fieldNames[ii] == NULL) {
         // Somehow, we have a value of numFields that's greater than the actual
         // number of elements in the fieldNames array.  Not sure how that's
         // possible, but bail.
-        printLog(ERR, "fieldNames[%llu] is NULL.  dbResult->numFields = %llu\n",
-          llu(ii), llu(dbResult->numFields));
+        printLog(ERR, "fieldNames[%llu] is NULL.  dbGetNumFields(dbResult) = %llu\n",
+          llu(ii), llu(dbGetNumFields(dbResult)));
         returnValue = false;
         break;
       }
@@ -229,18 +229,18 @@ DbResult* _sqlFixMissingFields(DbResult *dbResult, SqlDatabase *sqlDatabase,
     LOG_MALLOC_FAILURE();
     exit(1);
   }
-  // The only way this function is ever called is when dbResult->successful is
-  // true and dbResult->numFields is 0, so we know how to initialize
-  // dbResult->successful.
+  // The only way this function is ever called is when dbQuerySuccessful(dbResult) is
+  // true and dbGetNumFields(dbResult) is 0, so we know how to initialize
+  // dbQuerySuccessful(dbResult).
   dbResult->successful = true;
   
   DbResult *tableDescription = sqlDescribeTable(sqlDatabase, dbName, tableName);
   
-  dbResult->numFields = tableDescription->numResults;
+  dbResult->numFields = dbGetNumResults(tableDescription);
   dbResult->fieldTypes = (TypeDescriptor**) calloc(1,
-    dbResult->numFields * sizeof(TypeDescriptor*));
+    dbGetNumFields(dbResult) * sizeof(TypeDescriptor*));
   dbResult->rows = (void***) calloc(1, 2 * sizeof(void**));
-  dbResult->rows[0] = (void**) calloc(1, (dbResult->numFields + 1) * sizeof(void*));
+  dbResult->rows[0] = (void**) calloc(1, (dbGetNumFields(dbResult) + 1) * sizeof(void*));
   dbResult->rows[1] = NULL;
   dbResult->numRows = 1;
   
@@ -250,7 +250,7 @@ DbResult* _sqlFixMissingFields(DbResult *dbResult, SqlDatabase *sqlDatabase,
       && (*fieldNames[0] == '*'))
   ) {
     // Select all fields.  The usual case.
-    for (u64 field = 0; field < tableDescription->numResults; field++) {
+    for (u64 field = 0; field < dbGetNumResults(tableDescription); field++) {
       Bytes fieldName = dbGetBytesByName(tableDescription, field, "fieldName");
       bytesAddBytes((Bytes*) &dbResult->rows[0][field], fieldName);
       TypeDescriptor *type = sqlTypeNameToTypeDescriptor(dbGetStringByName(
@@ -262,7 +262,7 @@ DbResult* _sqlFixMissingFields(DbResult *dbResult, SqlDatabase *sqlDatabase,
     u64 numFields = 0;
     for (; fieldNames[numFields] != NULL; numFields++) {
       Bytes fieldName = fieldNames[numFields];
-      for (u64 field = 0; field < tableDescription->numResults; field++) {
+      for (u64 field = 0; field < dbGetNumResults(tableDescription); field++) {
         // The field name could have spaces or tabs in it, so we need to use it
         // as the haystack and the value in tableDescription as the needle.
         if (strstr(str(fieldName),
@@ -314,7 +314,7 @@ i32 sqlBuildTableDescriptions(SqlDatabase *sqlDatabase,
     "tableName=\"%s\")\n", sqlDatabase, dbName, tableName);
   
   DbResult *queryResult = sqlDescribeTable(sqlDatabase, dbName, tableName);
-  if ((queryResult == NULL) || (queryResult->successful == false)) {
+  if ((queryResult == NULL) || (dbQuerySuccessful(queryResult) == false)) {
     printLog(ERR, "Table %s.%s does not exist.\n", dbName, tableName);
     queryResult = dbFreeResult(queryResult);
     printLog(TRACE,
@@ -324,7 +324,7 @@ i32 sqlBuildTableDescriptions(SqlDatabase *sqlDatabase,
   }
   
   HashTable *tableDescriptionHt = htCreate(typeString);
-  for (u64 row = 0; row < queryResult->numResults; row++) {
+  for (u64 row = 0; row < dbGetNumResults(queryResult); row++) {
     const char *fieldName = dbGetStringByName(queryResult, row, "fieldName");
     TypeDescriptor *type = sqlTypeNameToTypeDescriptor(dbGetStringByName(
       queryResult, row, "typeInfo"));
@@ -345,7 +345,7 @@ i32 sqlBuildTableDescriptions(SqlDatabase *sqlDatabase,
   lookupKey = bytesDestroy(lookupKey);
   
   Vector *tableDescriptionVector = vectorCreate(typePointerNoCopy);
-  for (u64 row = 0; row < queryResult->numResults; row++) {
+  for (u64 row = 0; row < dbGetNumResults(queryResult); row++) {
     TypeDescriptor *type = sqlTypeNameToTypeDescriptor(dbGetStringByName(
       queryResult, row, "typeInfo"));
     vectorSetEntry(tableDescriptionVector, row, type, typePointerNoCopy);
@@ -461,7 +461,7 @@ DbResult* sqlGetValues_(void *db,
     "EXIT sqlGetValues_(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", orderBy=\"%s\") = {%llu results}\n",
     database, dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   return returnValue;
 }
 
@@ -596,15 +596,15 @@ DbResult* sqlGetValuesVargs(void *db,
   printLog(DEBUG, "Running query \"%s\"\n", query);
   queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  printLog(DEBUG, "Got %llu query results \n", llu(queryResult->numResults));
+  printLog(DEBUG, "Got %llu query results \n", llu(dbGetNumResults(queryResult)));
   
   returnValue = dbFreeResult(returnValue);
   returnValue = queryResult;
   
-  if (returnValue->numFields > 0) {
+  if (dbGetNumFields(returnValue) > 0) {
     sqlEnsureFieldTypes(database, dbString, tableName, returnValue);
-  } else if ((returnValue->successful == true)
-    && (returnValue->numFields == 0)
+  } else if ((dbQuerySuccessful(returnValue) == true)
+    && (dbGetNumFields(returnValue) == 0)
   ) {
     // This isn't a valid state.  We issued a select statement that was
     // successful but returned no fields.  That means the whole result is empty.
@@ -617,7 +617,7 @@ DbResult* sqlGetValuesVargs(void *db,
     "EXIT sqlGetValuesVargs(dbName=\"%s\", tableName=\"%s\", select=\"%s\", "
     "orderBy=\"%s\") = {%llu results}\n",
     dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   dbName = stringDestroy(dbName);
   return returnValue;
 }
@@ -712,12 +712,12 @@ DbResult* sqlGetValuesDict(void *db,
   DbResult *returnValue
     = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  printLog(DEBUG, "Got %llu query results \n", llu(returnValue->numResults));
+  printLog(DEBUG, "Got %llu query results \n", llu(dbGetNumResults(returnValue)));
   
-  if (returnValue->numFields > 0) {
+  if (dbGetNumFields(returnValue) > 0) {
     sqlEnsureFieldTypes(database, dbString, tableName, returnValue);
-  } else if ((returnValue->successful == true)
-    && (returnValue->numFields == 0)
+  } else if ((dbQuerySuccessful(returnValue) == true)
+    && (dbGetNumFields(returnValue) == 0)
   ) {
     // This isn't a valid state.  We issued a select statement that was
     // successful but returned no fields.  That means the whole result is empty.
@@ -730,7 +730,7 @@ DbResult* sqlGetValuesDict(void *db,
     "EXIT sqlGetValuesDict(dbName=\"%s\", tableName=\"%s\", select=\"%s\", "
     "orderBy=\"%s\") = {%llu results}\n",
     dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   dbName = stringDestroy(dbName);
   return returnValue;
 }
@@ -820,7 +820,7 @@ bool sqlAddRecordVargs(void *db,
   bytesAddStr(&query, ");");
   queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -910,7 +910,7 @@ bool sqlAddTableVargs(void *db, const char *dbString,
   bytesAddStr(&query, "));");
   queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1012,7 +1012,7 @@ bool sqlDeleteRecordsVargs(void *db, const char *dbString,
   printLog(DEBUG, "Running query \"%s\"\n", query);
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1214,7 +1214,7 @@ bool sqlUpdateRecordDict(void *db,
   
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  bool returnValue = queryResult->successful;
+  bool returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1260,7 +1260,7 @@ bool sqlAddRecordDict(void *db,
   
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  bool returnValue = queryResult->successful;
+  bool returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1358,15 +1358,15 @@ DbResult* sqlGetValuesLikeVargs(void *db,
   printLog(DEBUG, "Running query \"%s\"\n", query);
   queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  printLog(DEBUG, "Got %llu query results \n", llu(queryResult->numResults));
+  printLog(DEBUG, "Got %llu query results \n", llu(dbGetNumResults(queryResult)));
   
   returnValue = dbFreeResult(returnValue);
   returnValue = queryResult;
   
-  if (returnValue->numFields > 0) {
+  if (dbGetNumFields(returnValue) > 0) {
     sqlEnsureFieldTypes(database, dbString, tableName, returnValue);
-  } else if ((returnValue->successful == true)
-    && (returnValue->numFields == 0)
+  } else if ((dbQuerySuccessful(returnValue) == true)
+    && (dbGetNumFields(returnValue) == 0)
   ) {
     // This isn't a valid state.  We issued a select statement that was
     // successful but returned no fields.  That means the whole result is empty.
@@ -1379,7 +1379,7 @@ DbResult* sqlGetValuesLikeVargs(void *db,
     "EXIT sqlGetValuesLikeVargs(database=%p, dbName=\"%s\", tableName=\"%s\", "
     "select=\"%s\", orderBy=\"%s\") = {%llu results}\n",
     database, dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   dbName = stringDestroy(dbName);
   return returnValue;
 }
@@ -1457,7 +1457,7 @@ bool sqlAddTableList(void *db,
   printLog(DEBUG, "Running query \"%s\"\n", str(query));
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1504,7 +1504,7 @@ bool sqlDeleteTable(void *db,
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
   
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1592,9 +1592,9 @@ bool sqlDeleteRecordsLikeVargs(void *db,
   printLog(DEBUG, "Running query \"%s\"\n", query);
   queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  printLog(DEBUG, "Got %llu query results \n", llu(queryResult->numResults));
+  printLog(DEBUG, "Got %llu query results \n", llu(dbGetNumResults(queryResult)));
   
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1626,13 +1626,13 @@ bool sqlUpdateResultVargs(const DbResult *dbResult, u64 resultIndex,
   
   bool returnValue = false;
   
-  if (resultIndex >= dbResult->numResults) {
+  if (resultIndex >= dbGetNumResults(dbResult)) {
     printLog(WARN, "resultIndex out of range for DbResult.\n");
     printLog(TRACE,
       "EXIT sqlUpdateResultVargs(dbName=\"%s\", tableName=\"%s\", resultIndex=%llu) "
       "= {%s}\n", dbResult->dbName, dbResult->tableName, llu(resultIndex), "false");
     return false;
-  } else if (dbResult->numFields == 0) {
+  } else if (dbGetNumFields(dbResult) == 0) {
     printLog(WARN, "Invalid DbResult provided.\n");
     printLog(TRACE,
       "EXIT sqlUpdateResultVargs(dbName=\"%s\", tableName=\"%s\", resultIndex=%llu) "
@@ -1725,7 +1725,7 @@ bool sqlUpdateResultVargs(const DbResult *dbResult, u64 resultIndex,
   // Use the current values for the where clause.
   Bytes whereClause = NULL;
   const char **fieldNames = dbGetFieldNames(dbResult);
-  u64 numFields = dbResult->numFields;
+  u64 numFields = dbGetNumFields(dbResult);
   for (u64 i = 0; i < numFields; i++) {
     void *value = dbGetResultByIndex(dbResult, resultIndex, i, NULL);
     if (value != NULL) {
@@ -1777,7 +1777,7 @@ bool sqlUpdateResultVargs(const DbResult *dbResult, u64 resultIndex,
   
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE,
@@ -1811,7 +1811,7 @@ DbResult* sqlQuery(void *db, const char *query) {
   queryResult = database->stringQuery(database->connection, query);
   
   printLog(TRACE, "EXIT sqlQuery(query=\"%s\") = {%s, %llu results}\n", query,
-    (queryResult->successful) ? "successful" : "failed", llu(queryResult->numResults));
+    (dbQuerySuccessful(queryResult)) ? "successful" : "failed", llu(dbGetNumResults(queryResult)));
   return queryResult;
 }
 
@@ -1869,7 +1869,7 @@ bool sqlLockTablesDict(void *db, const Dictionary *tablesToLock) {
   
   DbResult *queryResult = database->bytesQuery(database->connection, queryString);
   queryString = bytesDestroy(queryString);
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   if (!querySuccessful) {
     // Nothing else we can do here.
@@ -1915,7 +1915,7 @@ bool sqlUnlockTables(void *db, const Dictionary *tableLock) {
   }
   
   DbResult *queryResult = database->stringQuery(database->connection, "unlock tables;");
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE, "EXIT sqlUnlockTables(database=%p, tableLock=%p) = {%s}\n",
@@ -1951,7 +1951,7 @@ bool sqlCommitTransaction(void *db) {
   }
   
   DbResult *queryResult = database->stringQuery(database->connection, "commit;");
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE, "EXIT sqlCommitTransaction(database=%p) = {%s}\n",
@@ -1986,7 +1986,7 @@ bool sqlRollbackTransaction(void *db) {
   }
   
   DbResult *queryResult = database->stringQuery(database->connection, "rollback;");
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE, "EXIT sqlRollbackTransaction(database=%p) = {%s}\n",
@@ -2036,7 +2036,7 @@ bool sqlDeleteField(void *db, const char *dbString,
   dbName = bytesDestroy(dbName);
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   // Invalidate the cache.
@@ -2121,7 +2121,7 @@ bool sqlAddField(void *db, const char *dbString,
   }
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   // Invalidate the cache.
@@ -2179,7 +2179,7 @@ bool sqlChangeFieldName(void *db, const char *dbString,
   abprintf(&query, "alter table %s.%s rename column %s to %s;",
     str(dbName), tableName, oldName, newName);
   DbResult *queryResult = database->bytesQuery(database->connection, query);
-  bool querySuccessful = queryResult->successful;
+  bool querySuccessful = dbQuerySuccessful(queryResult);
   query = bytesDestroy(query);
   
   // Invalidate the cache.
@@ -2232,7 +2232,7 @@ DbResult* sqlDescribeTable(void *db, const char *dbName,
   DbResult *tableDescription = sqlDatabase->describeTable(
     sqlDatabase->connection, dbName, tableName);
   
-  if (tableDescription->successful == true) {
+  if (dbQuerySuccessful(tableDescription) == true) {
     returnValue = dbFreeResult(returnValue);
     returnValue = tableDescription;
   } else {
@@ -2242,7 +2242,7 @@ DbResult* sqlDescribeTable(void *db, const char *dbName,
   printLog(TRACE,
     "EXIT sqlDescribeTable(sqlDatabase=%p, dbName=\"%s\", tableName=\"%s\") "
     "= {%s}\n", sqlDatabase, dbName, tableName,
-    (returnValue->successful == true) ? "successful" : "NOT successful");
+    (dbQuerySuccessful(returnValue) == true) ? "successful" : "NOT successful");
   return returnValue;
 }
 
@@ -2270,7 +2270,7 @@ bool sqlAddRecords(void *database,
       "EXIT sqlAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
       "= {NOT successful}\n", database, dbName, tableName);
     return false;
-  } else if ((dbResult == NULL) || (dbResult->numResults == 0)) {
+  } else if ((dbResult == NULL) || (dbGetNumResults(dbResult) == 0)) {
     // Not an error, but nothing to do.
     printLog(TRACE,
       "EXIT sqlAddRecords(database=%p, dbName=\"%s\", tableName=\"%s\") "
@@ -2297,8 +2297,8 @@ bool sqlAddRecords(void *database,
   bytesAddStr(&query, tableName);
   bytesAddStr(&query, " values ");
   
-  u64 numResults = dbResult->numResults;
-  u64 numFields = dbResult->numFields;
+  u64 numResults = dbGetNumResults(dbResult);
+  u64 numFields = dbGetNumFields(dbResult);
   TypeDescriptor **fieldTypes = dbResult->fieldTypes;
   for (u64 recordIndex = 0; recordIndex < numResults; recordIndex++) {
     bytesAddStr(&query, "(");
@@ -2354,7 +2354,7 @@ bool sqlAddRecords(void *database,
   printLog(DEBUG, "Running query \"%s\"\n", str(query));
   queryResult = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   if (returnValue == false) {
@@ -2472,7 +2472,7 @@ bool sqlRenameTable(void *db, const char *dbName,
     dbName, (dbInstance != NULL) ? dbInstance : "", newTableName);
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   printLog(TRACE, "EXIT sqlRenameTable(database=%p, dbName=\"%s\", "
@@ -2650,7 +2650,7 @@ bool sqlUpdateFieldVargs(void *db, const char *dbName,
   DbResult *queryResult
     = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
   query = bytesDestroy(query);
-  returnValue = queryResult->successful;
+  returnValue = dbQuerySuccessful(queryResult);
   queryResult = dbFreeResult(queryResult);
   
   SCOPE_EXIT(
@@ -2843,7 +2843,7 @@ i64 sqlGetNumRecords(void *db, const char *dbString, const char *tableName) {
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
   i64 returnValue = -1;
-  if ((queryResult != NULL) && (queryResult->numResults > 0)) {
+  if ((queryResult != NULL) && (dbGetNumResults(queryResult) > 0)) {
     TypeDescriptor *type = queryResult->fieldTypes[0];
     void *value = dbGetResultByIndex(queryResult, 0, 0, type);
     if (type == typeI64) {
@@ -2957,9 +2957,9 @@ DbResult* sqlGetOrValuesDict(void *database,
   DbResult *returnValue
     = sqlDatabase->bytesQuery(sqlDatabase->connection, query);
   query = bytesDestroy(query);
-  printLog(DEBUG, "Got %llu query results \n", llu(returnValue->numResults));
+  printLog(DEBUG, "Got %llu query results \n", llu(dbGetNumResults(returnValue)));
   
-  if ((returnValue->successful == true) && (returnValue->numFields == 0)) {
+  if ((dbQuerySuccessful(returnValue) == true) && (dbGetNumFields(returnValue) == 0)) {
     // This isn't a valid state.  We issued a select statement that was
     // successful but returned no fields.  That means the whole result is empty.
     // Fix this.
@@ -2971,7 +2971,7 @@ DbResult* sqlGetOrValuesDict(void *database,
     "EXIT sqlGetOrValuesDict(dbName=\"%s\", tableName=\"%s\", select=\"%s\", "
     "orderBy=\"%s\") = {%llu results}\n",
     dbName, tableName, select, (orderBy != NULL) ? orderBy : "",
-    llu(returnValue->numResults));
+    llu(dbGetNumResults(returnValue)));
   dbName = stringDestroy(dbName);
   return returnValue;
 }

@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
   if (sql == NULL) {
     DbResult *queryResult = sqliteGetDatabaseNames((SqlDatabase*) database->db);
     fputs("Databases:\n", stdout);
-    for (u64 i = 0; i < queryResult->numResults; i++) {
+    for (u64 i = 0; i < dbGetNumResults(queryResult); i++) {
       fputs(dbGetStringByIndex(queryResult, i, 0), stdout);
       fputs("\n", stdout);
     }
@@ -70,11 +70,11 @@ int main(int argc, char **argv) {
     
     DbResult *databaseNames
       = dbGetValues(database, "main", "Databases", "name", "type", "sqlite");
-    for (u64 i = 0; i < databaseNames->numResults; i++) {
+    for (u64 i = 0; i < dbGetNumResults(databaseNames); i++) {
       const char *dbName = dbGetStringByName(databaseNames, i, "name");
       DbResult *tableNames = dbGetTableNames(database, dbName);
       fprintf(stdout, "Tables in %s:\n", dbName);
-      for (u64 j = 0; j < tableNames->numResults; j++) {
+      for (u64 j = 0; j < dbGetNumResults(tableNames); j++) {
         fputs(dbGetStringByIndex(tableNames, j, 0), stdout);
         fputs("\n", stdout);
       }
@@ -88,11 +88,11 @@ int main(int argc, char **argv) {
   
   int returnValue = 0;
   DbResult *queryResult = sqlQuery((SqlDatabase*) database->db, sql);
-  bool querySuccessful = queryResult->successful;
-  if (queryResult->numResults > 0) {
+  bool querySuccessful = dbQuerySuccessful(queryResult);
+  if (dbGetNumResults(queryResult) > 0) {
     fputs("Query results:\n", stdout);
-    for (u64 i = 0; i < queryResult->numRows; i++) {
-      for (u64 j = 0; j < queryResult->numFields; j++) {
+    for (u64 i = 0; i < dbGetNumRows(queryResult); i++) {
+      for (u64 j = 0; j < dbGetNumFields(queryResult); j++) {
         if (queryResult->rows[i][j] != NULL) {
           if (i > 0) {
             char *value
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
             fputs((char*) queryResult->rows[i][j], stdout);
           }
         }
-        if (j < queryResult->numFields - 1) {
+        if (j < dbGetNumFields(queryResult) - 1) {
           fputs(", ", stdout);
         }
       }

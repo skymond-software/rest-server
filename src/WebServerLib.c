@@ -659,16 +659,22 @@ int handlePostRequest(WsThreadInfo *wsThreadInfo) {
       *charAt = '\0';
     }
     
-    if (wsNamespace == NULL) {
-      wsNamespace = getBytesBetween((char*) path, "/", "/");
-    }
-    
-    if (functionName == NULL) {
+    char *lastSlashAt = strrchr((char*) path, '/');
+    if (lastSlashAt != NULL) {
+      if (functionName == NULL) {
       // Pull it from the path.  Should be from last / to end of path.
-      char *slashAt = strrchr((char*) path, '/');
-      if (slashAt != NULL) {
-        slashAt++; // Move to the beginning of the function name.
-        bytesAddStr(&functionName, slashAt);
+        bytesAddStr(&functionName, lastSlashAt + 1);
+      }
+      
+      if (wsNamespace == NULL) {
+        char *firstSlashAt = strchr((char*) path, '/');
+        if (firstSlashAt != NULL) {
+          size_t wsNamespaceLength
+            = ((size_t) lastSlashAt) - ((size_t) firstSlashAt);
+          if (wsNamespaceLength > 1) {
+            bytesAddData(&wsNamespace, firstSlashAt + 1, wsNamespaceLength - 1);
+          }
+        }
       }
     }
   }
@@ -997,7 +1003,16 @@ int handleGetRequest(WsThreadInfo *wsThreadInfo) {
     return returnValue;
   }
   
-  Bytes wsNamespace = getBytesBetween((char*) path, "/", "/");
+  Bytes wsNamespace = NULL;
+  char *firstSlashAt = strchr((char*) path, '/');
+  char *lastSlashAt = strrchr((char*) path, '/');
+  if ((firstSlashAt != NULL) && (lastSlashAt != NULL)) {
+    size_t wsNamespaceLength = ((size_t) lastSlashAt) - ((size_t) firstSlashAt);
+    if (wsNamespaceLength > 1) {
+      bytesAddData(&wsNamespace, firstSlashAt + 1, wsNamespaceLength - 1);
+    }
+  }
+  
   if (wsNamespace != NULL) {
     // Check to see if there's a matching web service call.
     

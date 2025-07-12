@@ -280,7 +280,48 @@ extern "C"
 /// @brief Return a pointer to the first row of the result (the field names)
 /// if the rows table is not NULL, NULL otherwise.
 #define dbGetFieldNames(dbResult) \
-  ((const char**) (((dbResult)->rows != NULL) ? (dbResult)->rows[0] : NULL))
+  ((const char**) ((((dbResult) != NULL) && ((dbResult)->rows != NULL)) \
+    ? (dbResult)->rows[0] : NULL))
+
+/// @def dbGetNumRows(dbResult)
+///
+/// @brief Return the total number of rows in a DbResult, including the field
+/// names at the top (but not including the NULL row at the bottom).
+#define dbGetNumRows(dbResult) \
+  (((dbResult) != NULL) ? (dbResult)->numRows : 0)
+
+/// @def dbGetNumResults(dbResult)
+///
+/// @brief Return the total number of results in a DbResult.  This should be
+/// the value of (dbGetNumRows(dbResult) - 1) unless there are no rows.
+#define dbGetNumResults(dbResult) \
+  (((dbResult) != NULL) ? (dbResult)->numResults : 0)
+
+/// @def dbGetNumFields(dbResult)
+///
+/// @brief Return the total number of fields in a DbResult.
+#define dbGetNumFields(dbResult) \
+  (((dbResult) != NULL) ? (dbResult)->numFields : 0)
+
+/// @def dbQuerySuccessful(dbResult)
+///
+/// @brief Return whether or not a query was successful.
+#define dbQuerySuccessful(dbResult) \
+  (((dbResult) != NULL) ? (dbResult)->successful : false)
+
+/// @def dbGetDbName
+///
+/// @brief Return the dbName of a DbResult.
+#define dbGetDbName(dbResult) \
+  ((((dbResult) != NULL) && ((dbResult)->dbName != NULL)) \
+    ? (dbResult)->dbName : "")
+
+/// @def dbGetTableName
+///
+/// @brief Return the tableName of a DbResult.
+#define dbGetTableName(dbResult) \
+  ((((dbResult) != NULL) && ((dbResult)->tableName != NULL)) \
+    ? (dbResult)->tableName : "")
 
 extern char *dbInstance;
 
@@ -334,6 +375,7 @@ bool dbDeleteRecords_(Database *database,
   dbDeleteRecords_(database, dbName, tableName, ##__VA_ARGS__, NULL)
 Bytes** dbResultToBytesTable(DbResult *dbResult);
 const Bytes** dbResultGetBytesTable(DbResult *dbResult);
+Bytes** dbResultTakeBytesTable(DbResult *dbResult);
 const void*** dbResultGetRows(DbResult *dbResult);
 DbResult* dbGetValuesLike_(Database *database,
   const char *dbName, const char *tableName,
