@@ -1005,7 +1005,18 @@ int handleGetRequest(WsThreadInfo *wsThreadInfo) {
   
   Bytes wsNamespace = NULL;
   char *firstSlashAt = strchr((char*) path, '/');
+  char *questionMarkAt = strchr((char*) path, '?');
   char *lastSlashAt = strrchr((char*) path, '/');
+  if ((lastSlashAt != NULL) && (questionMarkAt != NULL)) {
+    if (((size_t) lastSlashAt) > ((size_t) questionMarkAt)) {
+      // This is not the right place for lastSlashAt.  Terminate the string
+      // where the question mark is and find the real one.
+      *questionMarkAt = '\0';
+      lastSlashAt = strrchr((char*) path, '/');
+      // Now put the question mark back so that the rest of the parsing works.
+      *questionMarkAt = '?';
+    }
+  }
   if ((firstSlashAt != NULL) && (lastSlashAt != NULL)) {
     size_t wsNamespaceLength = ((size_t) lastSlashAt) - ((size_t) firstSlashAt);
     if (wsNamespaceLength > 1) {
