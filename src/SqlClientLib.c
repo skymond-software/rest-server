@@ -227,7 +227,7 @@ DbResult* _sqlFixMissingFields(DbResult *dbResult, SqlDatabase *sqlDatabase,
   dbResult = (DbResult*) calloc(1, sizeof(DbResult));
   if (dbResult == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   // The only way this function is ever called is when dbQuerySuccessful(dbResult) is
   // true and dbGetNumFields(dbResult) is 0, so we know how to initialize
@@ -502,7 +502,7 @@ DbResult* sqlGetValuesVargs(void *db,
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   
   // Get the field types.
@@ -1308,7 +1308,7 @@ DbResult* sqlGetValuesLikeVargs(void *db,
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   
   bytesAddStr(&query, "select ");
@@ -1548,7 +1548,7 @@ bool sqlDeleteRecordsLikeVargs(void *db,
   DbResult *queryResult = (DbResult*) calloc(1, sizeof(DbResult));
   if (queryResult == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   bool returnValue = false;
   
@@ -1806,7 +1806,7 @@ DbResult* sqlQuery(void *db, const char *query) {
   DbResult *queryResult = (DbResult*) calloc(1, sizeof(DbResult));
   if (queryResult == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   queryResult = database->stringQuery(database->connection, query);
   
@@ -2218,7 +2218,7 @@ DbResult* sqlDescribeTable(void *db, const char *dbName,
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   
   if ((sqlDatabase == NULL) || (dbName == NULL) || (tableName == NULL)) {

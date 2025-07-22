@@ -2047,7 +2047,7 @@ Bytes dbResultToCsv(const DbResult *dbResult) {
  *   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
  *   if (returnValue == NULL) {
  *     LOG_MALLOC_FAILURE();
- *     exit(1);
+ *     return NULL;
  *   }
  *   
  *   Bytes **rows = stringToBytesTable(csv, "\r\n", ",");
@@ -2675,7 +2675,7 @@ DbResult* dbGetValuesDict(Database *database, const char *dbName,
     returnValue = (DbResult*) calloc(1, sizeof(DbResult));
     if (returnValue == NULL) {
       LOG_MALLOC_FAILURE();
-      exit(1);
+      return NULL;
     }
     return returnValue;
   }
@@ -2729,7 +2729,7 @@ DbResult* dbGetValuesDictOrderBy(Database *database, const char *dbName,
     returnValue = (DbResult*) calloc(1, sizeof(DbResult));
     if (returnValue == NULL) {
       LOG_MALLOC_FAILURE();
-      exit(1);
+      return NULL;
     }
     return returnValue;
   }
@@ -2767,7 +2767,7 @@ DbResult* dbGetTableNames(Database *database, const char *dbName) {
     returnValue = (DbResult*) calloc(1, sizeof(DbResult));
     if (returnValue == NULL) {
       LOG_MALLOC_FAILURE();
-      exit(1);
+      return NULL;
     }
     return returnValue;
   }
@@ -2856,7 +2856,7 @@ DbResult* dbDescribeTable(Database *database, const char *dbName,
     returnValue = (DbResult*) calloc(1, sizeof(DbResult));
     if (returnValue == NULL) {
       LOG_MALLOC_FAILURE();
-      exit(1);
+      return NULL;
     }
     return returnValue;
   }

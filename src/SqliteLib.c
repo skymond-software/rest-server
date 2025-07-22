@@ -498,7 +498,7 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
   DbResult *queryResult = (DbResult*) calloc(1, sizeof(DbResult));
   if (queryResult == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   const char *sqliteErrorMessage = NULL;
   (void) sqliteErrorMessage; // For when logging is disabled.
@@ -1373,7 +1373,7 @@ DbResult* sqliteDescribeTable(void *connection, const char *dbString,
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   if (dbQuerySuccessful(queryResult) == true) {
     returnValue->successful = true;

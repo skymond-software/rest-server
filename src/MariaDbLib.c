@@ -1921,7 +1921,7 @@ DbResult* _mariaDbExecQuery(MariaDb *database, const Bytes query) {
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   
   if (query == NULL) {
@@ -3826,7 +3826,7 @@ DbResult* mariaDbGetTableNames(void *db, const char *dbString) {
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   Bytes query = NULL;
   DbResult *queryResult = NULL;
@@ -4270,7 +4270,7 @@ DbResult* mariaDbDescribeTable(void *connection, const char *dbString,
   DbResult *returnValue = (DbResult*) calloc(1, sizeof(DbResult));
   if (returnValue == NULL) {
     LOG_MALLOC_FAILURE();
-    exit(1);
+    return NULL;
   }
   if (dbQuerySuccessful(queryResult) == true) {
     returnValue->successful = true;
