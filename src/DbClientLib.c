@@ -618,7 +618,7 @@ bool dbDeleteRecords_(Database *database, const char *dbName, const char *tableN
     printLog(ERR, "NULL database parameter provided.\n");
     printLog(TRACE,
       "EXIT dbDeleteRecords_(database=%p, dbName=\"%s\", tableName=\"%s\") "
-      "= {record %supdated}\n", database, dbName, tableName,
+      "= {record %sdeleted}\n", database, dbName, tableName,
       (returnValue == true) ? "" : "NOT ");
     return returnValue;
   }
@@ -632,7 +632,7 @@ bool dbDeleteRecords_(Database *database, const char *dbName, const char *tableN
   
   printLog(TRACE,
     "EXIT dbDeleteRecords_(database=%p, dbName=\"%s\", tableName=\"%s\") "
-    "= {record %supdated}\n", database, dbName, tableName,
+    "= {record %sdeleted}\n", database, dbName, tableName,
     (returnValue == true) ? "" : "NOT ");
   return returnValue;
 }
