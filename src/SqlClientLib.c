@@ -1545,11 +1545,6 @@ bool sqlDeleteRecordsLikeVargs(void *db,
     database, dbName, tableName);
   
   Bytes query = NULL;
-  DbResult *queryResult = (DbResult*) calloc(1, sizeof(DbResult));
-  if (queryResult == NULL) {
-    LOG_MALLOC_FAILURE();
-    return NULL;
-  }
   bool returnValue = false;
   
   bytesAddStr(&query, "delete from ");
@@ -1590,7 +1585,7 @@ bool sqlDeleteRecordsLikeVargs(void *db,
   }
   bytesAddStr(&query, ";");
   printLog(DEBUG, "Running query \"%s\"\n", query);
-  queryResult = database->bytesQuery(database->connection, query);
+  DbResult *queryResult = database->bytesQuery(database->connection, query);
   query = bytesDestroy(query);
   printLog(DEBUG, "Got %llu query results \n", llu(dbGetNumResults(queryResult)));
   
@@ -2180,6 +2175,7 @@ bool sqlChangeFieldName(void *db, const char *dbString,
     str(dbName), tableName, oldName, newName);
   DbResult *queryResult = database->bytesQuery(database->connection, query);
   bool querySuccessful = dbQuerySuccessful(queryResult);
+  queryResult = dbFreeResult(queryResult);
   query = bytesDestroy(query);
   
   // Invalidate the cache.
