@@ -647,7 +647,7 @@ DbResult* sqliteExecQueryBytes(void *connection, const Bytes queryBytes) {
         }
       } else if (dataType == SQLITE_NULL) {
         queryResult->rows[row][i] = NULL;
-        bytesAllocate((Bytes*) &queryResult->rows[row][i], 0);
+        queryResult->rows[row][i] = queryResult->fieldTypes[i]->create(NULL);
       }
     }
     
@@ -1301,10 +1301,6 @@ void* sqliteDisconnect(void *db) {
       DbResult *detachResult = sqliteExecQueryBytes(sqlite, query);
       if (!dbQuerySuccessful(detachResult)) {
         printLog(ERR, "Could not detach database \"%s\".\n", dbName);
-        printLog(TRACE,
-          "EXIT sqliteDisconnect(sqlDatabase=%p) = {NOT successful}\n",
-          sqlDatabase);
-        return sqlDatabase;
       }
       detachResult = dbFreeResult(detachResult);
       query = bytesDestroy(query);
