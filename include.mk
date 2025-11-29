@@ -6,6 +6,7 @@ REMOVE      := rm -rf
 ARCHIVE     := ar rcs
 
 CNEXT_OBJ_FILES := \
+    $(CNEXT_OBJ_DIR)/AuxMemory.o \
     $(CNEXT_OBJ_DIR)/CThreadsMessages.o \
     $(CNEXT_OBJ_DIR)/Coroutines.o \
     $(CNEXT_OBJ_DIR)/DataTypes.o \
