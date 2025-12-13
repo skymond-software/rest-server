@@ -278,11 +278,46 @@ typedef struct WsConnectionInfo {
   WsRequestObject     *functionParams;
 } WsConnectionInfo;
 
-WebServer* webServerCreate(const char *interfacePath, int portNumber,
-  const char *serverName, int timeout, SocketMode socketMode,
-  const char *certificate, const char *key, const char *redirectProtocol,
-  int redirectPort, RedirectFunction redirectFunction, WebService *webService
-);
+/// @struct WebServerCreateOptions
+///
+/// @brief Options for creating a web server.  None of the parameters are
+/// required.  i.e. NULL or zero is valid for all parameters.
+///
+/// @param interfacePath The path to the static pages the web server is to serve
+///   to web clients.
+/// @param serverName The name (and version, etc.) of the web server.
+/// @param timeout The number of seconds to retry socket creation before giving
+///   up.  A value of 0 means infinite timeout.
+/// @param socketMode The mode of the listener socket for the server (TLS or
+///   plaintext.
+/// @param certificate The .pem-formatted certificate if the listener socket
+///   is a TLS socket.
+/// @param key The .pem-formatted private key if the listener socket is a TLS
+///   socket.
+/// @param redirectProtocol The protocol (http or https) to redirect to instead
+///   of processing requests at this socket.
+/// @param redirectPort The TCP port to redirect to instead of processing
+///   requests at this socket.
+/// @param redirectFunction A RedirectFunction to dynamically generate a
+///   location header.  Takes precedence over redirectProtocol and redirectPort
+///   if present.
+/// @param webService A pointer to a populated WebService instance.  This
+///   instance is expected to be persistent across the lifetime of the
+///   WebServer.
+typedef struct WebServerCreateOptions {
+  const char *interfacePath;
+  const char *serverName;
+  int timeout;
+  SocketMode socketMode;
+  const char *certificate;
+  const char *key;
+  const char *redirectProtocol;
+  int redirectPort;
+  RedirectFunction redirectFunction;
+  WebService *webService;
+} WebServerCreateOptions;
+
+WebServer* webServerCreate(int portNumber, WebServerCreateOptions *options);
 WebServer* webServerDestroy(WebServer *webServer);
 const char *getMimeType(const char *fileExtension);
 

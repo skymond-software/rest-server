@@ -2022,68 +2022,107 @@ void setupMimeHashTable(void) {
   }
 }
 
-/// @fn WebServer* webServerCreate(const char *interfacePath, int portNumber, const char *serverName, int timeout, SocketMode socketMode, const char *certificate, const char *key, const char *redirectProtocol, int redirectPort, WsFunction redirectFunction, WebService *webService)
+/// @fn WebServer* webServerCreate(int portNumber, WebServerCreateOptions *options)
 ///
 /// @brief Create and start a WebServer instance.
 ///
-/// @param interfacePath The path to the static pages the web server is to serve
-///   to web clients.
 /// @param portNumber The port number to bind to.
-/// @param serverName The name (and version, etc.) of the web server.
-/// @param timeout The number of seconds to retry socket creation before giving
-///   up.  A value of 0 means infinite timeout.
-/// @param socketMode The mode of the listener socket for the server (TLS or
-///   plaintext.
-/// @param certificate The .pem-formatted certificate if the listener socket
-///   is a TLS socket.
-/// @param key The .pem-formatted private key if the listener socket is a TLS
-///   socket.
-/// @param redirectProtocol The protocol (http or https) to redirect to instead
-///   of processing requests at this socket.
-/// @param redirectPort The TCP port to redirect to instead of processing
-///   requests at this socket.
-/// @param redirectFunction A RedirectFunction to dynamically generate a
-///   location header.  Takes precedence over redirectProtocol and redirectPort
-///   if present.
-/// @param webService A pointer to a populated WebService instance.  This
-///   instance is expected to be persistent across the lifetime of the
-///   WebServer.
+/// @param options A pointer a WebServerCreateOptions structure containing
+///   optional information for creating the web server.  This parameter may be
+///   NULL.  If it is provided, it does not need to be dynamically allocated or
+///   persistent and this function does NOT take ownership of it.
 ///
 /// @return Returns a pointer to a newly-allocated WebServer instance on
 /// success, NULL on failure.
-WebServer* webServerCreate(const char *interfacePath, int portNumber,
-  const char *serverName, int timeout, SocketMode socketMode,
-  const char *certificate, const char *key, const char *redirectProtocol,
-  int redirectPort, RedirectFunction redirectFunction, WebService *webService
-) {
+WebServer* webServerCreate(int portNumber, WebServerCreateOptions *options) {
   printLog(TRACE,
-    "ENTER webServerCreate(interfacePath=\"%s\", portNumber=%d, "
-    "serverName=\"%s\", timeout=%d, socketMode=%s, certificate=%p, key=%p, "
-    "redirectProtocol=\"%s\", redirectPort=%d, redirectFunction=%p, "
+    "ENTER webServerCreate(portNumber=%d, interfacePath=%s, "
+    "serverName=%s, timeout=%d, socketMode=%s, certificate=%p, key=%p, "
+    "redirectProtocol=%s, redirectPort=%d, redirectFunction=%p, "
     "webService=%p)\n",
-    interfacePath, portNumber, serverName, timeout,
-    (socketMode < NUM_SOCKET_MODES) ? SocketModeNames[socketMode] : "INVALID",
-    certificate, key, (redirectProtocol == NULL) ? "" : redirectProtocol,
-    redirectPort, redirectFunction, webService);
+    portNumber,
+    (options == NULL) ? "NULL" : strOrNull(options->interfacePath),
+    (options == NULL) ? "NULL" : strOrNull(options->serverName),
+    (options == NULL) ?      0 : options->timeout,
+    (options == NULL)
+      ? SocketModeNames[PLAIN]
+      : ((options->socketMode < NUM_SOCKET_MODES)
+        ? SocketModeNames[options->socketMode]
+        : "INVALID"
+      ),
+    (options == NULL) ?   NULL : options->certificate,
+    (options == NULL) ?   NULL : options->key,
+    (options == NULL) ? "NULL" : strOrNull(options->redirectProtocol),
+    (options == NULL) ?      0 : options->redirectPort,
+    (options == NULL) ?   NULL : options->redirectFunction,
+    (options == NULL) ?   NULL : options->webService);
   
   // This needs to be done before anything else.
   call_once(&_mimeHashTableSetup, setupMimeHashTable);
   
-  WebServer *webServer = (WebServer*) calloc(1, sizeof(WebServer));
+  if ((portNumber == 0)
+    || ((options != NULL) && (options->socketMode >= NUM_SOCKET_MODES))
+  ) {
+    printLog(ERR, "One or more invalid parameters.\n");
+    printLog(TRACE,
+      "EXIT webServerCreate(portNumber=%d, interfacePath=%s, "
+      "serverName=%s, timeout=%d, socketMode=%s, certificate=%p, key=%p, "
+      "redirectProtocol=%s, redirectPort=%d, redirectFunction=%p, "
+      "webService=%p) = {NULL}\n",
+      portNumber,
+      (options == NULL) ? "NULL" : strOrNull(options->interfacePath),
+      (options == NULL) ? "NULL" : strOrNull(options->serverName),
+      (options == NULL) ?      0 : options->timeout,
+      (options == NULL)
+        ? SocketModeNames[PLAIN]
+        : ((options->socketMode < NUM_SOCKET_MODES)
+          ? SocketModeNames[options->socketMode]
+          : "INVALID"
+        ),
+      (options == NULL) ?   NULL : options->certificate,
+      (options == NULL) ?   NULL : options->key,
+      (options == NULL) ? "NULL" : strOrNull(options->redirectProtocol),
+      (options == NULL) ?      0 : options->redirectPort,
+      (options == NULL) ?   NULL : options->redirectFunction,
+      (options == NULL) ?   NULL : options->webService);
+    return NULL;
+  }
   
-  straddstr(&webServer->interfacePath, interfacePath);
+  WebServer *webServer = (WebServer*) calloc(1, sizeof(WebServer));
+  if (webServer == NULL) {
+    LOG_MALLOC_FAILURE();
+    return NULL;
+  }
+  
   webServer->portNumber = portNumber;
-  straddstr(&webServer->serverName, serverName);
-  webServer->timeout = timeout;
-  webServer->socketMode = socketMode;
-  straddstr(&webServer->certificate, certificate);
-  straddstr(&webServer->key, key);
-  if (redirectProtocol != NULL) {
-    straddstr(&webServer->redirectProtocol, redirectProtocol);
-  } // else webServer->redirectProtocol is already NULL from calloc
-  webServer->redirectPort = redirectPort;
-  webServer->redirectFunction = redirectFunction;
-  webServer->webService = webService;
+  if (options != NULL) {
+    // Despite the fact that this parameter is optional, this is the usual
+    // case.
+    straddstr(&webServer->interfacePath, options->interfacePath);
+    straddstr(&webServer->serverName, options->serverName);
+    webServer->timeout = options->timeout;
+    webServer->socketMode = options->socketMode;
+    straddstr(&webServer->certificate, options->certificate);
+    straddstr(&webServer->key, options->key);
+    if (options->redirectProtocol != NULL) {
+      straddstr(&webServer->redirectProtocol, options->redirectProtocol);
+    } // else webServer->redirectProtocol is already NULL from calloc
+    webServer->redirectPort = options->redirectPort;
+    webServer->redirectFunction = options->redirectFunction;
+    webServer->webService = options->webService;
+  } else {
+    // Provide defaults for all the information.
+    straddstr(&webServer->interfacePath, NULL);
+    straddstr(&webServer->serverName, NULL);
+    webServer->timeout = 0;
+    webServer->socketMode = PLAIN;
+    straddstr(&webServer->certificate, NULL);
+    straddstr(&webServer->key, NULL);
+    // webServer->redirectProtocol is already NULL from calloc
+    webServer->redirectPort = 0;
+    webServer->redirectFunction = NULL;
+    webServer->webService = NULL;
+  }
   
   // webServer->socket is initialized to NULL, webServer->threadId is
   // initialized to 0, and webServer->isRunning and webServer->exitNow are
@@ -2100,14 +2139,27 @@ WebServer* webServerCreate(const char *interfacePath, int portNumber,
   }
   
   printLog(TRACE,
-    "EXIT webServerCreate(interfacePath=\"%s\", portNumber=%d, "
-    "serverName=\"%s\", timeout=%d, socketMode=%s, certificate=%p, key=%p, "
-    "redirectProtocol=\"%s\", redirectPort=%d, redirectFunction=%p, "
+    "EXIT webServerCreate(portNumber=%d, interfacePath=%s, "
+    "serverName=%s, timeout=%d, socketMode=%s, certificate=%p, key=%p, "
+    "redirectProtocol=%s, redirectPort=%d, redirectFunction=%p, "
     "webService=%p) = {%p}\n",
-    interfacePath, portNumber, serverName, timeout,
-    (socketMode < NUM_SOCKET_MODES) ? SocketModeNames[socketMode] : "INVALID",
-    certificate, key, (redirectProtocol == NULL) ? "" : redirectProtocol,
-    redirectPort, redirectFunction, webService, webServer);
+    portNumber,
+    (options == NULL) ? "NULL" : strOrNull(options->interfacePath),
+    (options == NULL) ? "NULL" : strOrNull(options->serverName),
+    (options == NULL) ?      0 : options->timeout,
+    (options == NULL)
+      ? SocketModeNames[PLAIN]
+      : ((options->socketMode < NUM_SOCKET_MODES)
+        ? SocketModeNames[options->socketMode]
+        : "INVALID"
+      ),
+    (options == NULL) ?   NULL : options->certificate,
+    (options == NULL) ?   NULL : options->key,
+    (options == NULL) ? "NULL" : strOrNull(options->redirectProtocol),
+    (options == NULL) ?      0 : options->redirectPort,
+    (options == NULL) ?   NULL : options->redirectFunction,
+    (options == NULL) ?   NULL : options->webService,
+    webServer);
   return webServer;
 }
 

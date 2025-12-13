@@ -240,12 +240,19 @@ bool webServerUnitTest(void) {
   size_t indexHtmlSize = strlen(indexHtmlContent);
   
   putFileContent("/tmp/index.html", indexHtmlContent, indexHtmlSize);
-  WebServer* webServer = webServerCreate("/tmp", 8999,
-    "UnitTestServer", 15, /*socketMode=*/ PLAIN, /*certificate=*/ NULL,
-    /*key=*/ NULL, /*redirectProtocol=*/ NULL, /*redirectPort=*/ 0,
-    /*redirectFunction=*/ NULL,
-    /*webService=*/ NULL
-  );
+  WebServerCreateOptions webServerCreateOptions = {
+    .interfacePath = "/tmp",
+    .serverName = "UnitTestServer",
+    .timeout = 15,
+    .socketMode = PLAIN,
+    .certificate = NULL,
+    .key = NULL,
+    .redirectProtocol = NULL,
+    .redirectPort = 0,
+    .redirectFunction = 0,
+    .webService = 0,
+  };
+  WebServer* webServer = webServerCreate(8999, &webServerCreateOptions);
   if (webServer == NULL) {
     printLog(ERR, "webServerCreate returned NULL.\n");
     return false;
@@ -326,12 +333,8 @@ bool webServerUnitTest(void) {
   
   webServer = webServerDestroy(webServer);
   
-  webServer = webServerCreate("/tmp", 9000,
-    "UnitTestServer", 15, /*socketMode=*/ TLS, /*certificate=*/ NULL,
-    /*key=*/ NULL, /*redirectProtocol=*/ NULL, /*redirectPort=*/ 0,
-    /*redirectFunction=*/ NULL,
-    /*webService=*/ NULL
-  );
+  webServerCreateOptions.socketMode = TLS;
+  webServer = webServerCreate(9000, &webServerCreateOptions);
   if (webServer == NULL) {
     printLog(ERR, "webServerCreate returned NULL.\n");
     return false;
@@ -367,11 +370,10 @@ bool webServerUnitTest(void) {
   
   webServer = webServerDestroy(webServer);
   
-  webServer = webServerCreate("/tmp", 9001,
-    "UnitTestServer", 15, /*socketMode=*/ PLAIN, /*certificate=*/ NULL,
-    /*key=*/ NULL, /*redirectProtocol=*/ "https", /*redirectPort=*/ 1,
-    /*redirectFunction=*/ NULL, /*webService=*/ NULL
-  );
+  webServerCreateOptions.socketMode = PLAIN;
+  webServerCreateOptions.redirectProtocol = "https";
+  webServerCreateOptions.redirectPort = 1;
+  webServer = webServerCreate(9001, &webServerCreateOptions);
   
   response = wcGet("http://127.0.0.1:9001", "/marklar", 500);
   if (response != NULL) {
@@ -385,12 +387,11 @@ bool webServerUnitTest(void) {
   
   webServer = webServerDestroy(webServer);
   
-  webServer = webServerCreate("/tmp", 9002,
-    "UnitTestServer", 15, /*socketMode=*/ TLS, /*certificate=*/ NULL,
-    /*key=*/ NULL, /*redirectProtocol=*/ NULL, /*redirectPort=*/ 0,
-    /*redirectFunction=*/ NULL,
-    &unitTestWebService
-  );
+  webServerCreateOptions.socketMode = TLS;
+  webServerCreateOptions.redirectProtocol = NULL;
+  webServerCreateOptions.redirectPort = 0;
+  webServerCreateOptions.webService = &unitTestWebService;
+  webServer = webServerCreate(9002, &webServerCreateOptions);
   if (webServer == NULL) {
     printLog(ERR, "webServerCreate returned NULL.\n");
     return false;
@@ -517,12 +518,13 @@ bool webServerUnitTest(void) {
     return false;
   }
   
-  WebServer *redirectServer = webServerCreate(NULL, 9003,
-    "UnitTestServer", 15, /*socketMode=*/ PLAIN, /*certificate=*/ NULL,
-    /*key=*/ NULL, /*redirectProtocol=*/ NULL, /*redirectPort=*/ 0,
-    /*redirectFunction=*/ redirectUnitTestFunction,
-    &unitTestWebService
-  );
+  webServerCreateOptions.interfacePath = NULL;
+  webServerCreateOptions.socketMode = PLAIN;
+  webServerCreateOptions.redirectProtocol = NULL;
+  webServerCreateOptions.redirectPort = 0;
+  webServerCreateOptions.redirectFunction = redirectUnitTestFunction;
+  webServerCreateOptions.webService = &unitTestWebService;
+  WebServer *redirectServer = webServerCreate(9003, &webServerCreateOptions);
   if (webServer == NULL) {
     printLog(ERR, "webServerCreate returned NULL.\n");
     return false;
