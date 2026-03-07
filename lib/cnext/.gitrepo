@@ -4,7 +4,7 @@
 ; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
 ;
 [subrepo]
-	remote = git@github.com:james-card/cnext.git
+	remote = git@github.com:brian-card/cnext.git
 	branch = main
 	commit = 21b2b34493a61baa3a0d09d852343dbd708e710a
 	parent = 697f90bf06bf840f974e7c854a6da30962f024aa
