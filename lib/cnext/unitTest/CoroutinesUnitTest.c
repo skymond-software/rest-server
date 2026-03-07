@@ -38,7 +38,7 @@ void testCoconditionSignalCallback(void *stateData,
 
 // Individual test functions
 bool testCoroutineBasicFunctionality(void);
-bool testCoroutineIdFunctionality(void);
+bool testCoroutineContextFunctionality(void);
 bool testCoroutineStateFunctionality(void);
 bool testCoroutineNullParameters(void);
 bool testComutexBasicFunctionality(void);
@@ -405,11 +405,11 @@ bool testCoroutineBasicFunctionality(void) {
 }
 
 ///
-/// @brief Test coroutine ID functionality
+/// @brief Test coroutine context functionality
 ///
 /// @return Returns true if all tests pass, false otherwise
 ///
-bool testCoroutineIdFunctionality(void) {
+bool testCoroutineContextFunctionality(void) {
   printLog(DEBUG, "Testing coroutine ID functionality\n");
   
   Coroutine *coroutine = NULL;
@@ -420,30 +420,30 @@ bool testCoroutineIdFunctionality(void) {
   }
   
   // Test initial ID value
-  CoroutineId initialId = coroutineId(coroutine);
-  if (initialId != COROUTINE_ID_NOT_SET) {
-    printLog(ERR, "New coroutine should have ID set to COROUTINE_ID_NOT_SET\n");
+  void *initialContext = coroutineContext(coroutine);
+  if (initialContext != NULL) {
+    printLog(ERR, "New coroutine should have context set to NULL\n");
     return false;
   }
   
   // Test setting and getting ID
-  CoroutineId testId = 42;
-  result = coroutineSetId(coroutine, testId);
+  intptr_t testContext = 42;
+  result = coroutineSetContext(coroutine, (void*) testContext);
   if (result != coroutineSuccess) {
-    printLog(ERR, "Failed to set coroutine ID: %d\n", result);
+    printLog(ERR, "Failed to set coroutine context: %d\n", result);
     return false;
   }
   
-  CoroutineId retrievedId = coroutineId(coroutine);
-  if (retrievedId != testId) {
-    printLog(ERR, "Retrieved coroutine ID doesn't match set ID\n");
+  intptr_t retrievedContext = (intptr_t) coroutineContext(coroutine);
+  if (retrievedContext != testContext) {
+    printLog(ERR, "Retrieved coroutine context doesn't match set context\n");
     return false;
   }
   
   // Clean up
   coroutineResume(coroutine, NULL);
   
-  printLog(DEBUG, "Coroutine ID functionality tests passed\n");
+  printLog(DEBUG, "Coroutine context functionality tests passed\n");
   return true;
 }
 
@@ -528,17 +528,16 @@ bool testCoroutineNullParameters(void) {
   }
   
   // Test coroutineId with NULL coroutine
-  CoroutineId id = coroutineId(NULL);
-  if (id != COROUTINE_ID_NOT_SET) {
-    printLog(ERR, "coroutineId should return COROUTINE_ID_NOT_SET "
-      "for NULL coroutine\n");
+  void *context = coroutineContext(NULL);
+  if (context != NULL) {
+    printLog(ERR, "coroutine context should return NULLfor NULL coroutine\n");
     return false;
   }
   
-  // Test coroutineSetId with NULL coroutine
-  result = coroutineSetId(NULL, 42);
+  // Test coroutineSetContext with NULL coroutine
+  result = coroutineSetContext(NULL, (void*) ((intptr_t) 42));
   if (result == coroutineSuccess) {
-    printLog(ERR, "coroutineSetId should fail with NULL coroutine\n");
+    printLog(ERR, "coroutineSetContext should fail with NULL coroutine\n");
     return false;
   }
   
@@ -1188,7 +1187,7 @@ bool testCoroutineDeadlock(void) {
     return false;
   }
   printLog(INFO, "coroutineA = %p\n", coroutineA);
-  coroutineSetId(coroutineA, 0);
+  coroutineSetContext(coroutineA, (void*) ((intptr_t) 0));
   
   coroutineCreate(&coroutineB, lockingCoroutine, reverseList);
   if (rv != coroutineSuccess) {
@@ -1196,7 +1195,7 @@ bool testCoroutineDeadlock(void) {
     return false;
   }
   printLog(INFO, "coroutineB = %p\n", coroutineB);
-  coroutineSetId(coroutineB, 1);
+  coroutineSetContext(coroutineB, (void*) ((intptr_t) 1));
   
   Coroutine *coroutines[] = {
     coroutineA,
@@ -1241,10 +1240,10 @@ bool testCoroutineDeadlock(void) {
   printLog(INFO, "Terminated coroutineB\n");
   
   coroutineCreate(&coroutineA, lockingCoroutine, forwardList);
-  coroutineSetId(coroutineA, 0);
+  coroutineSetContext(coroutineA, (void*) ((intptr_t) 0));
   coroutines[0] = coroutineA;
   coroutineCreate(&coroutineB, timedLockingCoroutine, reverseList);
-  coroutineSetId(coroutineB, 1);
+  coroutineSetContext(coroutineB, (void*) ((intptr_t) 1));
   coroutines[1] = coroutineB;
   
   for (int ii = 0; ii < 4; ii++) {
@@ -1369,7 +1368,7 @@ bool coroutinesUnitTest(void) {
       allTestsPassed = false;
     }
     
-    if (!testCoroutineIdFunctionality()) {
+    if (!testCoroutineContextFunctionality()) {
       allTestsPassed = false;
     }
     
@@ -1427,11 +1426,11 @@ bool coroutinesUnitTest(void) {
     }
     
     // Test getRunningCoroutineId macro
-    CoroutineId runningId = getRunningCoroutineId();
-    if (runningId == COROUTINE_ID_NOT_SET) {
-      printLog(DEBUG, "Running coroutine ID is not set (expected)\n");
+    void *context = getRunningCoroutineContext();
+    if (context == NULL) {
+      printLog(DEBUG, "Running coroutine context is NULL (expected)\n");
     } else {
-      printLog(DEBUG, "Running coroutine ID: %lu\n", (unsigned long) runningId);
+      printLog(DEBUG, "Running coroutine context : %p\n", context);
     }
     
 #ifdef THREAD_SAFE_COROUTINES
