@@ -135,7 +135,7 @@ int consumerThreadFunction(void *arg) {
     
     if (msg_type(message) != TEST_MSG_TYPE_SIMPLE) {
       printLog(DEBUG, "Consumer received unexpected message type: %d", 
-               msg_type(message));
+               (int) msg_type(message));
       msg_release(message);
       msg_destroy(message);
       continue;
@@ -197,7 +197,7 @@ bool testMessageCreation(void) {
   // Verify message properties
   if (msg_type(message) != TEST_MSG_TYPE_SIMPLE) {
     printLog(ERR, "Message type mismatch: expected %d, got %d",
-             TEST_MSG_TYPE_SIMPLE, msg_type(message));
+             TEST_MSG_TYPE_SIMPLE, (int) msg_type(message));
     msg_destroy(message);
     return false;
   }
